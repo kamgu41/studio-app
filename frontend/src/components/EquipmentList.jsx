@@ -3,6 +3,7 @@ import axios from 'axios';
 import CartPage from './CartPage';
 import MyBookings from './MyBookings';
 import EditorPanel from './EditorPanel';
+const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
 
 function EquipmentList({ currentUser }) {
   const [loading, setLoading] = useState(true);
