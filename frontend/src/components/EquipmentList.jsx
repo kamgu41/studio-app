@@ -55,7 +55,7 @@ function EquipmentList({ currentUser }) {
   // ===== ИЗМЕНЕНИЕ СТАТУСА =====
   const changeStatus = async (id, newStatus) => {
     try {
-      await axios.patch(`/api/equipment/${id}/status`, { status: newStatus });
+      await axios.patch(`${API_URL}/api/equipment/${id}/status`, { status: newStatus });
       loadEquipment();
     } catch (err) {
       alert('Ошибка при изменении статуса: ' + err.message);
@@ -70,50 +70,28 @@ function EquipmentList({ currentUser }) {
   };
 
   const confirmRepair = async () => {
-  if (!repairItemId) return;
-  
-  try {
-    await axios.patch(`/api/equipment/${repairItemId}/status`, {
-      status: 'repair',
-      repairComment: repairComment.trim() || 'Не указано',
-      rentedBy: currentUser
-    });
+    if (!repairItemId) return;
     
-    // ===== ЛОКАЛЬНОЕ ОБНОВЛЕНИЕ (без перезагрузки) =====
-    setMainCategories(prevCategories =>
-      prevCategories.map(main => ({
-        ...main,
-        subCategories: main.subCategories?.map(sub => ({
-          ...sub,
-          items: sub.items?.map(item =>
-            item.id === repairItemId
-              ? { 
-                  ...item, 
-                  status: 'repair', 
-                  repair_comment: repairComment.trim() || 'Не указано',
-                  repaired_by: currentUser,
-                  rented_by: null, 
-                  rented_until: null,
-                  booking_comment: null
-                }
-              : item
-          )
-        }))
-      }))
-    );
-    
-    setShowRepairModal(false);
-    setRepairItemId(null);
-    setRepairComment('');
-    
-    // Если предмет был в корзине — удаляем
-    if (cart.find(item => item.id === repairItemId)) {
-      setCart(prev => prev.filter(item => item.id !== repairItemId));
+    try {
+      await axios.patch(`${API_URL}/api/equipment/${repairItemId}/status`, {
+        status: 'repair',
+        repairComment: repairComment.trim() || 'Не указано',
+        rentedBy: currentUser
+      });
+      
+      loadEquipment();
+      setShowRepairModal(false);
+      setRepairItemId(null);
+      setRepairComment('');
+      
+      if (cart.find(item => item.id === repairItemId)) {
+        setCart(prev => prev.filter(item => item.id !== repairItemId));
+      }
+    } catch (err) {
+      alert('Ошибка при отправке в ремонт: ' + err.message);
     }
-  } catch (err) {
-    alert('Ошибка при отправке в ремонт: ' + err.message);
-  }
-};
+  };
+
   const openRepairDetails = (item) => {
     setRepairDetailsItem(item);
     setShowRepairDetails(true);
@@ -143,6 +121,8 @@ function EquipmentList({ currentUser }) {
     return acc + subs.reduce((subAcc, sub) => subAcc + (sub.items || []).length, 0);
   }, 0);
 
+  const isMobile = window.innerWidth < 600;
+
   if (loading) {
     return <div style={{ textAlign: 'center', padding: '40px', color: '#aaa' }}>⏳ Загрузка...</div>;
   }
@@ -157,64 +137,68 @@ function EquipmentList({ currentUser }) {
       backgroundColor: '#0b0b0b',
       color: '#e0e0e0',
       fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      padding: '20px'
+      padding: isMobile ? '10px' : '20px'
     }}>
       <div style={{
         maxWidth: '1200px',
         margin: '0 auto',
-        padding: '20px 20px 40px'
+        padding: isMobile ? '10px' : '20px 20px 40px'
       }}>
-        {/* ===== ШАПКА ===== */}
+        {/* ===== ШАПКА (АДАПТИВНАЯ) ===== */}
         <header style={{
           display: 'flex',
+          flexDirection: 'row',
+          flexWrap: 'wrap',
           justifyContent: 'space-between',
           alignItems: 'center',
           borderBottom: '1px solid #2a2a2a',
-          paddingBottom: '16px',
-          marginBottom: '24px',
-          flexWrap: 'wrap',
-          gap: '12px'
+          paddingBottom: '12px',
+          marginBottom: '16px',
+          gap: '8px'
         }}>
           <div>
-            <h1 
-              style={{
-                fontSize: '24px',
-                fontWeight: '300',
-                letterSpacing: '2px',
-                margin: 0,
-                color: '#ffffff',
-                cursor: 'pointer',
-                userSelect: 'none',
-                transition: 'color 0.2s'
-              }}
-              onMouseEnter={(e) => e.target.style.color = '#888'}
-              onMouseLeave={(e) => e.target.style.color = '#ffffff'}
-              onClick={() => {
-                const password = prompt('Введите пароль для доступа к редактору:');
-                if (password === '0000') {
-                  setShowEditor(true);
-                } else if (password !== null) {
-                  alert('Неверный пароль');
-                }
-              }}
-            >
+            <h1 style={{
+              fontSize: isMobile ? '18px' : '24px',
+              fontWeight: '300',
+              letterSpacing: '2px',
+              margin: 0,
+              color: '#ffffff',
+              cursor: 'pointer',
+              userSelect: 'none',
+              transition: 'color 0.2s'
+            }}
+            onMouseEnter={(e) => e.target.style.color = '#888'}
+            onMouseLeave={(e) => e.target.style.color = '#ffffff'}
+            onClick={() => {
+              const password = prompt('Введите пароль для доступа к редактору:');
+              if (password === '0000') {
+                setShowEditor(true);
+              } else if (password !== null) {
+                alert('Неверный пароль');
+              }
+            }}>
               ОБОРУДОВАНИЕ <span style={{ color: '#666', fontWeight: '200' }}>| КАМФИЛЬМ</span>
             </h1>
             <p style={{
-              fontSize: '13px',
+              fontSize: '12px',
               color: '#555',
-              margin: '6px 0 0 0',
+              margin: '2px 0 0 0',
               letterSpacing: '0.5px'
             }}>
               {totalItems} позиций
             </p>
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: isMobile ? '6px' : '16px',
+            flexWrap: 'wrap'
+          }}>
             <div style={{
               display: 'flex',
-              gap: '12px',
-              fontSize: '12px',
+              gap: '6px',
+              fontSize: isMobile ? '8px' : '12px',
               color: '#555'
             }}>
               <span>● ДОСТУПНО</span>
@@ -225,53 +209,39 @@ function EquipmentList({ currentUser }) {
             <button
               onClick={() => setShowMyBookings(true)}
               style={{
-                padding: '8px 16px',
+                padding: isMobile ? '4px 10px' : '8px 16px',
                 backgroundColor: '#1a1a1a',
                 border: '1px solid #333',
                 borderRadius: '20px',
                 color: '#e0e0e0',
-                fontSize: '14px',
+                fontSize: isMobile ? '11px' : '14px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = '#2a2a2a';
-                e.target.style.borderColor = '#555';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = '#1a1a1a';
-                e.target.style.borderColor = '#333';
+                gap: '4px',
+                whiteSpace: 'nowrap'
               }}
             >
-              📋 Мои бронирования
+              📋 Мои брони
             </button>
 
             <button
               onClick={() => setShowCart(true)}
               style={{
                 position: 'relative',
-                padding: '8px 16px',
+                padding: isMobile ? '4px 10px' : '8px 16px',
                 backgroundColor: '#1a1a1a',
                 border: '1px solid #333',
                 borderRadius: '20px',
                 color: '#e0e0e0',
-                fontSize: '14px',
+                fontSize: isMobile ? '11px' : '14px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = '#2a2a2a';
-                e.target.style.borderColor = '#555';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = '#1a1a1a';
-                e.target.style.borderColor = '#333';
+                gap: '4px',
+                whiteSpace: 'nowrap'
               }}
             >
               🛒 Корзина
@@ -282,11 +252,11 @@ function EquipmentList({ currentUser }) {
                   right: '-6px',
                   backgroundColor: '#4caf50',
                   color: '#0b0b0b',
-                  fontSize: '11px',
+                  fontSize: '10px',
                   fontWeight: '600',
                   borderRadius: '50%',
-                  width: '20px',
-                  height: '20px',
+                  width: '18px',
+                  height: '18px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
@@ -298,28 +268,31 @@ function EquipmentList({ currentUser }) {
           </div>
         </header>
 
-        {/* ===== ВКЛАДКИ ===== */}
+        {/* ===== ВКЛАДКИ (АДАПТИВНЫЕ) ===== */}
         <div style={{
           display: 'flex',
           gap: '4px',
-          marginBottom: '20px',
+          marginBottom: '16px',
           borderBottom: '1px solid #2a2a2a',
           paddingBottom: '4px',
-          flexWrap: 'wrap'
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none'
         }}>
           <button 
             onClick={() => setActiveTab('all')}
             style={{
-              padding: '8px 20px',
+              padding: isMobile ? '6px 12px' : '8px 20px',
               backgroundColor: activeTab === 'all' ? '#2a2a2a' : 'transparent',
               border: 'none',
               borderRadius: '4px 4px 0 0',
               color: activeTab === 'all' ? '#fff' : '#666',
-              fontSize: '13px',
+              fontSize: isMobile ? '11px' : '13px',
               fontWeight: activeTab === 'all' ? '500' : '400',
               cursor: 'pointer',
               borderBottom: activeTab === 'all' ? '2px solid #4caf50' : '2px solid transparent',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
             }}
           >
             📊 Все
@@ -327,16 +300,17 @@ function EquipmentList({ currentUser }) {
           <button 
             onClick={() => setActiveTab('available')}
             style={{
-              padding: '8px 20px',
+              padding: isMobile ? '6px 12px' : '8px 20px',
               backgroundColor: activeTab === 'available' ? '#1a2e1a' : 'transparent',
               border: 'none',
               borderRadius: '4px 4px 0 0',
               color: activeTab === 'available' ? '#4caf50' : '#666',
-              fontSize: '13px',
+              fontSize: isMobile ? '11px' : '13px',
               fontWeight: activeTab === 'available' ? '500' : '400',
               cursor: 'pointer',
               borderBottom: activeTab === 'available' ? '2px solid #4caf50' : '2px solid transparent',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
             }}
           >
             ✅ Доступно
@@ -344,16 +318,17 @@ function EquipmentList({ currentUser }) {
           <button 
             onClick={() => setActiveTab('repair')}
             style={{
-              padding: '8px 20px',
+              padding: isMobile ? '6px 12px' : '8px 20px',
               backgroundColor: activeTab === 'repair' ? '#2a1a0a' : 'transparent',
               border: 'none',
               borderRadius: '4px 4px 0 0',
               color: activeTab === 'repair' ? '#b45309' : '#666',
-              fontSize: '13px',
+              fontSize: isMobile ? '11px' : '13px',
               fontWeight: activeTab === 'repair' ? '500' : '400',
               cursor: 'pointer',
               borderBottom: activeTab === 'repair' ? '2px solid #b45309' : '2px solid transparent',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
             }}
           >
             🔧 В ремонте
@@ -361,16 +336,17 @@ function EquipmentList({ currentUser }) {
           <button 
             onClick={() => setActiveTab('rented')}
             style={{
-              padding: '8px 20px',
+              padding: isMobile ? '6px 12px' : '8px 20px',
               backgroundColor: activeTab === 'rented' ? '#2a0a0a' : 'transparent',
               border: 'none',
               borderRadius: '4px 4px 0 0',
               color: activeTab === 'rented' ? '#b91c1c' : '#666',
-              fontSize: '13px',
+              fontSize: isMobile ? '11px' : '13px',
               fontWeight: activeTab === 'rented' ? '500' : '400',
               cursor: 'pointer',
               borderBottom: activeTab === 'rented' ? '2px solid #b91c1c' : '2px solid transparent',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
             }}
           >
             🔒 Занято
@@ -379,7 +355,6 @@ function EquipmentList({ currentUser }) {
 
         {/* ===== ДВУХУРОВНЕВЫЙ СПИСОК С ФИЛЬТРАЦИЕЙ ===== */}
         {(() => {
-          // Фильтруем предметы по статусу
           const filteredMainCategories = mainCategories.map(main => ({
             ...main,
             subCategories: main.subCategories?.map(sub => ({
@@ -408,14 +383,13 @@ function EquipmentList({ currentUser }) {
 
             return (
               <section key={mainCat.id} style={{ marginBottom: '8px' }}>
-                {/* Заголовок главной категории */}
                 <div
                   onClick={() => toggleCategory(mainCat.id)}
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '12px 16px',
+                    padding: isMobile ? '8px 12px' : '12px 16px',
                     backgroundColor: '#1a1a1a',
                     borderRadius: '6px',
                     cursor: 'pointer',
@@ -423,20 +397,18 @@ function EquipmentList({ currentUser }) {
                     border: '1px solid #2a2a2a',
                     userSelect: 'none'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a2a2a'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'}
                 >
                   <span style={{
-                    fontSize: '16px',
+                    fontSize: isMobile ? '14px' : '16px',
                     fontWeight: '600',
                     color: '#e0e0e0',
-                    letterSpacing: '1px'
+                    letterSpacing: '0.5px'
                   }}>
                     {mainCat.name}
                   </span>
                   <span style={{
                     color: '#666',
-                    fontSize: '18px',
+                    fontSize: isMobile ? '16px' : '18px',
                     transition: 'transform 0.3s',
                     transform: isMainOpen ? 'rotate(180deg)' : 'rotate(0deg)'
                   }}>
@@ -444,10 +416,9 @@ function EquipmentList({ currentUser }) {
                   </span>
                 </div>
 
-                {/* Подкатегории */}
                 {isMainOpen && (
                   <div style={{
-                    paddingLeft: '16px',
+                    paddingLeft: isMobile ? '8px' : '16px',
                     marginTop: '4px',
                     borderLeft: '2px solid #2a2a2a'
                   }}>
@@ -457,14 +428,13 @@ function EquipmentList({ currentUser }) {
 
                       return (
                         <div key={sub.id} style={{ marginBottom: '4px' }}>
-                          {/* Заголовок подкатегории */}
                           <div
                             onClick={() => toggleCategory(sub.id)}
                             style={{
                               display: 'flex',
                               justifyContent: 'space-between',
                               alignItems: 'center',
-                              padding: '6px 12px',
+                              padding: isMobile ? '4px 8px' : '6px 12px',
                               backgroundColor: '#111',
                               borderRadius: '4px',
                               cursor: 'pointer',
@@ -472,11 +442,9 @@ function EquipmentList({ currentUser }) {
                               border: '1px solid #2a2a2a',
                               userSelect: 'none'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#111'}
                           >
                             <span style={{
-                              fontSize: '14px',
+                              fontSize: isMobile ? '12px' : '14px',
                               fontWeight: '500',
                               color: '#aaa'
                             }}>
@@ -484,7 +452,7 @@ function EquipmentList({ currentUser }) {
                             </span>
                             <span style={{
                               color: '#555',
-                              fontSize: '14px',
+                              fontSize: isMobile ? '12px' : '14px',
                               transition: 'transform 0.3s',
                               transform: isSubOpen ? 'rotate(180deg)' : 'rotate(0deg)'
                             }}>
@@ -492,14 +460,13 @@ function EquipmentList({ currentUser }) {
                             </span>
                           </div>
 
-                          {/* Предметы */}
                           {isSubOpen && (
                             <div style={{
                               display: 'flex',
                               flexDirection: 'column',
                               gap: '2px',
                               marginTop: '2px',
-                              paddingLeft: '8px',
+                              paddingLeft: isMobile ? '4px' : '8px',
                               borderLeft: '2px solid #1a1a1a'
                             }}>
                               {items.map((item) => {
@@ -515,7 +482,7 @@ function EquipmentList({ currentUser }) {
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
-                                      padding: '4px 12px',
+                                      padding: isMobile ? '4px 8px' : '4px 12px',
                                       borderRadius: '4px',
                                       backgroundColor: isInCart ? '#1a3a1a' : isRented ? '#2a1a1a' : 'transparent',
                                       borderLeft: `3px solid ${
@@ -525,31 +492,31 @@ function EquipmentList({ currentUser }) {
                                         '#b45309'
                                       }`,
                                       flexWrap: 'wrap',
-                                      gap: '4px'
+                                      gap: isMobile ? '2px' : '4px'
                                     }}
                                   >
                                     <span style={{
-                                      fontSize: '14px',
+                                      fontSize: isMobile ? '12px' : '14px',
                                       fontWeight: isInCart || isRented ? '500' : '400',
                                       color: isInCart ? '#4caf50' : isRented ? '#f44336' : '#ddd'
                                     }}>
                                       {item.name}
                                     </span>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', flexWrap: 'wrap' }}>
                                       {isRented && item.rented_by && (
-                                        <span style={{ color: '#888', fontSize: '12px' }}>
+                                        <span style={{ color: '#888', fontSize: isMobile ? '10px' : '12px' }}>
                                           👤 {item.rented_by}
                                           {item.rented_until && (
-                                            <span style={{ color: '#666', fontSize: '11px', marginLeft: '4px' }}>
+                                            <span style={{ color: '#666', fontSize: isMobile ? '9px' : '11px', marginLeft: '2px' }}>
                                               до {new Date(item.rented_until).toLocaleDateString()}
                                             </span>
                                           )}
                                           {item.booking_comment && (
                                             <span style={{ 
                                               color: '#b45309', 
-                                              fontSize: '11px', 
-                                              marginLeft: '8px',
+                                              fontSize: isMobile ? '9px' : '11px', 
+                                              marginLeft: '4px',
                                               fontStyle: 'italic'
                                             }}>
                                               💬 {item.booking_comment}
@@ -565,14 +532,11 @@ function EquipmentList({ currentUser }) {
                                             background: 'none',
                                             border: 'none',
                                             color: '#b45309',
-                                            fontSize: '14px',
+                                            fontSize: isMobile ? '12px' : '14px',
                                             cursor: 'pointer',
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            transition: 'background-color 0.2s'
+                                            padding: '2px 4px',
+                                            borderRadius: '4px'
                                           }}
-                                          onMouseEnter={(e) => e.target.style.backgroundColor = '#2a1a0a'}
-                                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                                           title="Нажмите, чтобы увидеть комментарий"
                                         >
                                           💬
@@ -580,12 +544,12 @@ function EquipmentList({ currentUser }) {
                                       )}
 
                                       {!isRented && (
-                                        <div style={{ display: 'flex', gap: '4px' }}>
+                                        <div style={{ display: 'flex', gap: '2px' }}>
                                           <button
                                             onClick={() => changeStatus(item.id, 'available')}
                                             style={{
-                                              padding: '2px 8px',
-                                              fontSize: '11px',
+                                              padding: isMobile ? '2px 6px' : '2px 8px',
+                                              fontSize: isMobile ? '9px' : '11px',
                                               fontWeight: '400',
                                               letterSpacing: '0.3px',
                                               borderRadius: '2px',
@@ -596,26 +560,14 @@ function EquipmentList({ currentUser }) {
                                               transition: 'color 0.2s, background-color 0.2s'
                                             }}
                                             disabled={isAvailable}
-                                            onMouseEnter={(e) => {
-                                              if (!isAvailable) {
-                                                e.target.style.color = '#4caf50';
-                                                e.target.style.backgroundColor = 'rgba(76, 175, 80, 0.1)';
-                                              }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                              if (!isAvailable) {
-                                                e.target.style.color = '#555';
-                                                e.target.style.backgroundColor = 'transparent';
-                                              }
-                                            }}
                                           >
                                             ДОСТУПЕН
                                           </button>
                                           <button
                                             onClick={() => openRepairModal(item.id)}
                                             style={{
-                                              padding: '2px 8px',
-                                              fontSize: '11px',
+                                              padding: isMobile ? '2px 6px' : '2px 8px',
+                                              fontSize: isMobile ? '9px' : '11px',
                                               fontWeight: '400',
                                               letterSpacing: '0.3px',
                                               borderRadius: '2px',
@@ -626,18 +578,6 @@ function EquipmentList({ currentUser }) {
                                               transition: 'color 0.2s, background-color 0.2s'
                                             }}
                                             disabled={isRepair}
-                                            onMouseEnter={(e) => {
-                                              if (!isRepair) {
-                                                e.target.style.color = '#b45309';
-                                                e.target.style.backgroundColor = 'rgba(180, 83, 9, 0.1)';
-                                              }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                              if (!isRepair) {
-                                                e.target.style.color = '#555';
-                                                e.target.style.backgroundColor = 'transparent';
-                                              }
-                                            }}
                                           >
                                             РЕМОНТ
                                           </button>
@@ -648,8 +588,8 @@ function EquipmentList({ currentUser }) {
                                         <button
                                           onClick={() => addToCart(item)}
                                           style={{
-                                            padding: '2px 8px',
-                                            fontSize: '11px',
+                                            padding: isMobile ? '2px 6px' : '2px 8px',
+                                            fontSize: isMobile ? '9px' : '11px',
                                             borderRadius: '2px',
                                             border: '1px solid #555',
                                             backgroundColor: isInCart ? '#4caf50' : 'transparent',
@@ -664,8 +604,8 @@ function EquipmentList({ currentUser }) {
 
                                       {isRepair && (
                                         <span style={{
-                                          padding: '2px 8px',
-                                          fontSize: '11px',
+                                          padding: '2px 6px',
+                                          fontSize: isMobile ? '9px' : '11px',
                                           borderRadius: '2px',
                                           border: '1px solid #444',
                                           color: '#444',
@@ -703,7 +643,7 @@ function EquipmentList({ currentUser }) {
           backgroundColor: '#0b0b0b',
           zIndex: 1500,
           overflow: 'auto',
-          padding: '20px'
+          padding: isMobile ? '10px' : '20px'
         }}>
           <CartPage 
             cart={cart}
@@ -742,7 +682,7 @@ function EquipmentList({ currentUser }) {
           backgroundColor: '#0b0b0b',
           zIndex: 1500,
           overflow: 'auto',
-          padding: '20px'
+          padding: isMobile ? '10px' : '20px'
         }}>
           <MyBookings
             currentUser={currentUser}
@@ -803,9 +743,9 @@ function EquipmentList({ currentUser }) {
             borderRadius: '12px',
             padding: '30px',
             maxWidth: '450px',
-            width: '100%'
+            width: '90%'
           }}>
-            <h3 style={{ color: '#fff', marginTop: 0, fontSize: '18px' }}>
+            <h3 style={{ color: '#fff', marginTop: 0, fontSize: isMobile ? '16px' : '18px' }}>
               🔧 Отправка в ремонт
             </h3>
             
@@ -898,9 +838,9 @@ function EquipmentList({ currentUser }) {
             borderRadius: '12px',
             padding: '30px',
             maxWidth: '450px',
-            width: '100%'
+            width: '90%'
           }}>
-            <h3 style={{ color: '#fff', marginTop: 0, fontSize: '18px' }}>
+            <h3 style={{ color: '#fff', marginTop: 0, fontSize: isMobile ? '16px' : '18px' }}>
               🔧 Детали ремонта
             </h3>
             
