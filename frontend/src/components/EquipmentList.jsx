@@ -491,32 +491,54 @@ function EquipmentList({ currentUser }) {
                                         isAvailable ? '#4caf50' :
                                         '#b45309'
                                       }`,
-                                      flexWrap: 'wrap',
-                                      gap: isMobile ? '2px' : '4px'
+                                      flexWrap: 'nowrap',
+                                      gap: isMobile ? '4px' : '8px',
+                                      alignItems: 'center',
+                                      minHeight: '32px'
                                     }}
                                   >
+                                    {/* ===== НАЗВАНИЕ (ПЕРЕНЕСЕНИЕ СТРОК) ===== */}
                                     <span style={{
                                       fontSize: isMobile ? '12px' : '14px',
                                       fontWeight: isInCart || isRented ? '500' : '400',
-                                      color: isInCart ? '#4caf50' : isRented ? '#f44336' : '#ddd'
+                                      color: isInCart ? '#4caf50' : isRented ? '#f44336' : '#ddd',
+                                      flex: '1 1 auto',
+                                      minWidth: '60px',
+                                      wordBreak: 'break-word',
+                                      overflowWrap: 'break-word',
+                                      hyphens: 'auto',
+                                      lineHeight: '1.3',
+                                      paddingRight: '4px'
                                     }}>
                                       {item.name}
                                     </span>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '2px' : '4px', flexWrap: 'wrap' }}>
+                                    {/* ===== ПРАВАЯ ЧАСТЬ (СТАТУСЫ + КНОПКИ) ===== */}
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: isMobile ? '2px' : '4px',
+                                      flexWrap: 'wrap',
+                                      flexShrink: 0,
+                                      justifyContent: 'flex-end'
+                                    }}>
                                       {isRented && item.rented_by && (
-                                        <span style={{ color: '#888', fontSize: isMobile ? '10px' : '12px' }}>
+                                        <span style={{ 
+                                          color: '#888', 
+                                          fontSize: isMobile ? '9px' : '11px',
+                                          whiteSpace: 'nowrap'
+                                        }}>
                                           👤 {item.rented_by}
                                           {item.rented_until && (
-                                            <span style={{ color: '#666', fontSize: isMobile ? '9px' : '11px', marginLeft: '2px' }}>
+                                            <span style={{ color: '#666', fontSize: isMobile ? '8px' : '10px', marginLeft: '2px' }}>
                                               до {new Date(item.rented_until).toLocaleDateString()}
                                             </span>
                                           )}
                                           {item.booking_comment && (
                                             <span style={{ 
                                               color: '#b45309', 
-                                              fontSize: isMobile ? '9px' : '11px', 
-                                              marginLeft: '4px',
+                                              fontSize: isMobile ? '8px' : '10px', 
+                                              marginLeft: '2px',
                                               fontStyle: 'italic'
                                             }}>
                                               💬 {item.booking_comment}
@@ -544,7 +566,7 @@ function EquipmentList({ currentUser }) {
                                       )}
 
                                       {!isRented && (
-                                        <div style={{ display: 'flex', gap: '2px' }}>
+                                        <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
                                           <button
                                             onClick={() => changeStatus(item.id, 'available')}
                                             style={{
@@ -557,7 +579,8 @@ function EquipmentList({ currentUser }) {
                                               backgroundColor: isAvailable ? '#4caf50' : 'transparent',
                                               color: isAvailable ? '#0b0b0b' : '#555',
                                               cursor: isAvailable ? 'default' : 'pointer',
-                                              transition: 'color 0.2s, background-color 0.2s'
+                                              transition: 'color 0.2s, background-color 0.2s',
+                                              whiteSpace: 'nowrap'
                                             }}
                                             disabled={isAvailable}
                                           >
@@ -575,7 +598,8 @@ function EquipmentList({ currentUser }) {
                                               backgroundColor: isRepair ? '#b45309' : 'transparent',
                                               color: isRepair ? '#0b0b0b' : '#555',
                                               cursor: isRepair ? 'default' : 'pointer',
-                                              transition: 'color 0.2s, background-color 0.2s'
+                                              transition: 'color 0.2s, background-color 0.2s',
+                                              whiteSpace: 'nowrap'
                                             }}
                                             disabled={isRepair}
                                           >
@@ -595,7 +619,8 @@ function EquipmentList({ currentUser }) {
                                             backgroundColor: isInCart ? '#4caf50' : 'transparent',
                                             color: isInCart ? '#0b0b0b' : '#888',
                                             cursor: 'pointer',
-                                            transition: 'all 0.2s'
+                                            transition: 'all 0.2s',
+                                            flexShrink: 0
                                           }}
                                         >
                                           {isInCart ? '✔' : '➕'}
@@ -610,7 +635,8 @@ function EquipmentList({ currentUser }) {
                                           border: '1px solid #444',
                                           color: '#444',
                                           opacity: 0.3,
-                                          cursor: 'default'
+                                          cursor: 'default',
+                                          flexShrink: 0
                                         }}>
                                           ➕
                                         </span>
