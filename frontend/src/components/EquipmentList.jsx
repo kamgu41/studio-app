@@ -476,173 +476,181 @@ function EquipmentList({ currentUser }) {
                                 const isAvailable = item.status === 'available';
 
                                 return (
-                                  <div
-                                    key={item.id}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      padding: isMobile ? '4px 8px' : '4px 12px',
-                                      borderRadius: '4px',
-                                      backgroundColor: isInCart ? '#1a3a1a' : isRented ? '#2a1a1a' : 'transparent',
-                                      borderLeft: `3px solid ${
-                                        isInCart ? '#4caf50' :
-                                        isRented ? '#b91c1c' :
-                                        isAvailable ? '#4caf50' :
-                                        '#b45309'
-                                      }`,
-                                      flexWrap: 'nowrap',
-                                      gap: isMobile ? '4px' : '8px',
-                                      alignItems: 'center',
-                                      minHeight: '32px'
-                                    }}
-                                  >
-                                    {/* ===== НАЗВАНИЕ (ПЕРЕНЕСЕНИЕ СТРОК) ===== */}
-                                    <span style={{
-                                      fontSize: isMobile ? '12px' : '14px',
-                                      fontWeight: isInCart || isRented ? '500' : '400',
-                                      color: isInCart ? '#4caf50' : isRented ? '#f44336' : '#ddd',
-                                      flex: '1 1 auto',
-                                      minWidth: '60px',
-                                      wordBreak: 'break-word',
-                                      overflowWrap: 'break-word',
-                                      hyphens: 'auto',
-                                      lineHeight: '1.3',
-                                      paddingRight: '4px'
-                                    }}>
-                                      {item.name}
-                                    </span>
+ <div
+  key={item.id}
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: isMobile ? '8px 8px' : '4px 12px',
+    borderRadius: '4px',
+    backgroundColor: isInCart ? '#1a3a1a' : isRented ? '#2a1a1a' : 'transparent',
+    borderLeft: `3px solid ${
+      isInCart ? '#4caf50' :
+      isRented ? '#b91c1c' :
+      isAvailable ? '#4caf50' :
+      '#b45309'
+    }`,
+    flexWrap: 'nowrap',
+    gap: isMobile ? '6px' : '8px',
+    alignItems: 'center',
+    minHeight: isMobile ? '44px' : '32px',
+    cursor: 'default'
+  }}
+>
+  {/* ===== НАЗВАНИЕ (ВЫРАВНИВАНИЕ ПО ЛЕВОМУ КРАЮ) ===== */}
+  <span style={{
+    fontSize: isMobile ? '14px' : '14px',
+    fontWeight: isInCart || isRented ? '500' : '400',
+    color: isInCart ? '#4caf50' : isRented ? '#f44336' : '#ddd',
+    flex: '1 1 auto',
+    minWidth: '60px',
+    wordBreak: 'break-word',
+    overflowWrap: 'break-word',
+    hyphens: 'auto',
+    lineHeight: '1.4',
+    paddingRight: '8px',
+    textAlign: 'left'
+  }}>
+    {item.name}
+  </span>
 
-                                    {/* ===== ПРАВАЯ ЧАСТЬ (СТАТУСЫ + КНОПКИ) ===== */}
-                                    <div style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: isMobile ? '2px' : '4px',
-                                      flexWrap: 'wrap',
-                                      flexShrink: 0,
-                                      justifyContent: 'flex-end'
-                                    }}>
-                                      {isRented && item.rented_by && (
-                                        <span style={{ 
-                                          color: '#888', 
-                                          fontSize: isMobile ? '9px' : '11px',
-                                          whiteSpace: 'nowrap'
-                                        }}>
-                                          👤 {item.rented_by}
-                                          {item.rented_until && (
-                                            <span style={{ color: '#666', fontSize: isMobile ? '8px' : '10px', marginLeft: '2px' }}>
-                                              до {new Date(item.rented_until).toLocaleDateString()}
-                                            </span>
-                                          )}
-                                          {item.booking_comment && (
-                                            <span style={{ 
-                                              color: '#b45309', 
-                                              fontSize: isMobile ? '8px' : '10px', 
-                                              marginLeft: '2px',
-                                              fontStyle: 'italic'
-                                            }}>
-                                              💬 {item.booking_comment}
-                                            </span>
-                                          )}
-                                        </span>
-                                      )}
+  {/* ===== ПРАВАЯ ЧАСТЬ (СТАТУСЫ + КНОПКИ) ===== */}
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: isMobile ? '4px' : '4px',
+    flexWrap: 'wrap',
+    flexShrink: 0,
+    justifyContent: 'flex-end'
+  }}>
+    {isRented && item.rented_by && (
+      <span style={{ 
+        color: '#888', 
+        fontSize: isMobile ? '10px' : '11px',
+        whiteSpace: 'nowrap'
+      }}>
+        👤 {item.rented_by}
+        {item.rented_until && (
+          <span style={{ color: '#666', fontSize: isMobile ? '8px' : '10px', marginLeft: '2px' }}>
+            до {new Date(item.rented_until).toLocaleDateString()}
+          </span>
+        )}
+        {item.booking_comment && (
+          <span style={{ 
+            color: '#b45309', 
+            fontSize: isMobile ? '8px' : '10px', 
+            marginLeft: '2px',
+            fontStyle: 'italic'
+          }}>
+            💬 {item.booking_comment}
+          </span>
+        )}
+      </span>
+    )}
 
-                                      {isRepair && item.repair_comment && (
-                                        <button
-                                          onClick={() => openRepairDetails(item)}
-                                          style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            color: '#b45309',
-                                            fontSize: isMobile ? '12px' : '14px',
-                                            cursor: 'pointer',
-                                            padding: '2px 4px',
-                                            borderRadius: '4px'
-                                          }}
-                                          title="Нажмите, чтобы увидеть комментарий"
-                                        >
-                                          💬
-                                        </button>
-                                      )}
+    {isRepair && item.repair_comment && (
+      <button
+        onClick={() => openRepairDetails(item)}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#b45309',
+          fontSize: isMobile ? '14px' : '14px',
+          cursor: 'pointer',
+          padding: isMobile ? '4px 6px' : '2px 4px',
+          borderRadius: '4px'
+        }}
+        title="Нажмите, чтобы увидеть комментарий"
+      >
+        💬
+      </button>
+    )}
 
-                                      {!isRented && (
-                                        <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
-                                          <button
-                                            onClick={() => changeStatus(item.id, 'available')}
-                                            style={{
-                                              padding: isMobile ? '2px 6px' : '2px 8px',
-                                              fontSize: isMobile ? '9px' : '11px',
-                                              fontWeight: '400',
-                                              letterSpacing: '0.3px',
-                                              borderRadius: '2px',
-                                              border: 'none',
-                                              backgroundColor: isAvailable ? '#4caf50' : 'transparent',
-                                              color: isAvailable ? '#0b0b0b' : '#555',
-                                              cursor: isAvailable ? 'default' : 'pointer',
-                                              transition: 'color 0.2s, background-color 0.2s',
-                                              whiteSpace: 'nowrap'
-                                            }}
-                                            disabled={isAvailable}
-                                          >
-                                            ДОСТУПЕН
-                                          </button>
-                                          <button
-                                            onClick={() => openRepairModal(item.id)}
-                                            style={{
-                                              padding: isMobile ? '2px 6px' : '2px 8px',
-                                              fontSize: isMobile ? '9px' : '11px',
-                                              fontWeight: '400',
-                                              letterSpacing: '0.3px',
-                                              borderRadius: '2px',
-                                              border: 'none',
-                                              backgroundColor: isRepair ? '#b45309' : 'transparent',
-                                              color: isRepair ? '#0b0b0b' : '#555',
-                                              cursor: isRepair ? 'default' : 'pointer',
-                                              transition: 'color 0.2s, background-color 0.2s',
-                                              whiteSpace: 'nowrap'
-                                            }}
-                                            disabled={isRepair}
-                                          >
-                                            РЕМОНТ
-                                          </button>
-                                        </div>
-                                      )}
+    {!isRented && (
+      <div style={{ display: 'flex', gap: isMobile ? '4px' : '2px', flexShrink: 0 }}>
+        <button
+          onClick={() => changeStatus(item.id, 'available')}
+          style={{
+            padding: isMobile ? '4px 10px' : '2px 8px',
+            fontSize: isMobile ? '11px' : '11px',
+            fontWeight: '400',
+            letterSpacing: '0.3px',
+            borderRadius: '2px',
+            border: 'none',
+            backgroundColor: isAvailable ? '#4caf50' : 'transparent',
+            color: isAvailable ? '#0b0b0b' : '#555',
+            cursor: isAvailable ? 'default' : 'pointer',
+            transition: 'color 0.2s, background-color 0.2s',
+            whiteSpace: 'nowrap',
+            minHeight: isMobile ? '32px' : 'auto'
+          }}
+          disabled={isAvailable}
+        >
+          ДОСТУПЕН
+        </button>
+        <button
+          onClick={() => openRepairModal(item.id)}
+          style={{
+            padding: isMobile ? '4px 10px' : '2px 8px',
+            fontSize: isMobile ? '11px' : '11px',
+            fontWeight: '400',
+            letterSpacing: '0.3px',
+            borderRadius: '2px',
+            border: 'none',
+            backgroundColor: isRepair ? '#b45309' : 'transparent',
+            color: isRepair ? '#0b0b0b' : '#555',
+            cursor: isRepair ? 'default' : 'pointer',
+            transition: 'color 0.2s, background-color 0.2s',
+            whiteSpace: 'nowrap',
+            minHeight: isMobile ? '32px' : 'auto'
+          }}
+          disabled={isRepair}
+        >
+          РЕМОНТ
+        </button>
+      </div>
+    )}
 
-                                      {isAvailable && (
-                                        <button
-                                          onClick={() => addToCart(item)}
-                                          style={{
-                                            padding: isMobile ? '2px 6px' : '2px 8px',
-                                            fontSize: isMobile ? '9px' : '11px',
-                                            borderRadius: '2px',
-                                            border: '1px solid #555',
-                                            backgroundColor: isInCart ? '#4caf50' : 'transparent',
-                                            color: isInCart ? '#0b0b0b' : '#888',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s',
-                                            flexShrink: 0
-                                          }}
-                                        >
-                                          {isInCart ? '✔' : '➕'}
-                                        </button>
-                                      )}
+    {isAvailable && (
+      <button
+        onClick={() => addToCart(item)}
+        style={{
+          padding: isMobile ? '4px 10px' : '2px 8px',
+          fontSize: isMobile ? '11px' : '11px',
+          borderRadius: '2px',
+          border: '1px solid #555',
+          backgroundColor: isInCart ? '#4caf50' : 'transparent',
+          color: isInCart ? '#0b0b0b' : '#888',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          flexShrink: 0,
+          minHeight: isMobile ? '32px' : 'auto'
+        }}
+      >
+        {isInCart ? '✔' : '➕'}
+      </button>
+    )}
 
-                                      {isRepair && (
-                                        <span style={{
-                                          padding: '2px 6px',
-                                          fontSize: isMobile ? '9px' : '11px',
-                                          borderRadius: '2px',
-                                          border: '1px solid #444',
-                                          color: '#444',
-                                          opacity: 0.3,
-                                          cursor: 'default',
-                                          flexShrink: 0
-                                        }}>
-                                          ➕
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
+    {isRepair && (
+      <span style={{
+        padding: isMobile ? '4px 8px' : '2px 6px',
+        fontSize: isMobile ? '11px' : '11px',
+        borderRadius: '2px',
+        border: '1px solid #444',
+        color: '#444',
+        opacity: 0.3,
+        cursor: 'default',
+        flexShrink: 0,
+        minHeight: isMobile ? '32px' : 'auto',
+        display: 'flex',
+        alignItems: 'center'
+      }}>
+        ➕
+      </span>
+    )}
+  </div>
+</div>
                                 );
                               })}
                             </div>
