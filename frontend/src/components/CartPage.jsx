@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { addDays, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
 import { ru } from 'date-fns/locale';
+const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
 
 function CartPage({ cart, setCart, onClose, onBookingComplete, currentUser }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -125,7 +126,7 @@ function CartPage({ cart, setCart, onClose, onBookingComplete, currentUser }) {
 
     try {
       const ids = cart.map(item => item.id);
-      await axios.post('/api/equipment/bulk-book', {
+      await axios.post(`${API_URL}/api/equipment/bulk-book`, {
         ids: ids,
         rentedBy: currentUser,
         rentedUntil: selectedEnd.toISOString().split('T')[0],

@@ -24,20 +24,25 @@ function EquipmentList({ currentUser }) {
   const [showRepairDetails, setShowRepairDetails] = useState(false);
   const [repairDetailsItem, setRepairDetailsItem] = useState(null);
 
-  // ===== ЗАГРУЗКА ДАННЫХ =====
   const loadEquipment = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get('/api/full-hierarchy');
-      setMainCategories(response.data);
-      setError(null);
-    } catch (err) {
-      console.error('❌ Ошибка загрузки:', err);
-      setError('Не удалось загрузить данные');
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    setLoading(true);
+    console.log('🟢 Загружаем данные...');
+    
+    // ===== ЖЁСТКО ПРОПИСЫВАЕМ URL БЭКЕНДА =====
+    const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
+    const response = await axios.get(`${API_URL}/api/full-hierarchy`);
+    
+    console.log('✅ Данные загружены:', response.data.length, 'категорий');
+    setMainCategories(response.data);
+    setError(null);
+  } catch (err) {
+    console.error('❌ Ошибка загрузки:', err);
+    setError('Не удалось загрузить данные. Проверьте подключение к серверу.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const toggleCategory = (id) => {
     setOpenCategories(prev => ({

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
 
 function EditorPanel({ onClose, onUpdate, initialData }) {
   const [mainCategories, setMainCategories] = useState([]);
@@ -32,7 +33,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/full-hierarchy');
+      const response = await axios.get(`${API_URL}/api/full-hierarchy`);
       setMainCategories(response.data);
       setMessage('');
     } catch (err) {
@@ -69,7 +70,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
     }
 
     try {
-      const response = await axios.post('/api/sub-category', {
+      await axios.post(`${API_URL}/api/sub-category`, {
         name: newSubName.trim(),
         main_category_id: mainId
       });
@@ -102,7 +103,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
     }
 
     try {
-      await axios.patch(`/api/sub-category/${id}`, {
+      await axios.patch(`${API_URL}/api/sub-category/${id}`, {
         name: editingSubValue.trim()
       });
       
@@ -132,7 +133,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
     if (!window.confirm(`Удалить подкатегорию "${name}"? Это можно сделать только если она пуста.`)) return;
 
     try {
-      await axios.delete(`/api/sub-category/${id}`);
+      await axios.delete(`${API_URL}/api/sub-category/${id}`);
       
       setMainCategories(prev => prev.map(main => ({
         ...main,
@@ -154,7 +155,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
 
   try {
     // 1. Создаём предмет
-    const response = await axios.post('/api/equipment', {
+    await axios.post(`${API_URL}/api/equipment`, {
       name: newItemName.trim(),
       description: 'Временная категория',
       status: 'available',
@@ -191,7 +192,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
     }
 
     try {
-      await axios.patch(`/api/equipment/${id}/rename`, {
+      await axios.patch(`${API_URL}/api/equipment/${id}/rename`, {
         newName: editingItemValue.trim()
       });
       
@@ -221,7 +222,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
     }
 
     try {
-      await axios.patch(`/api/equipment/${id}/move-sub`, {
+      await axios.patch(`${API_URL}/api/equipment/${id}/move-sub`, {
         newSubCategoryId: movingItemTarget
       });
       
@@ -266,7 +267,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
     if (!window.confirm(`Удалить предмет "${name}"? Это действие НЕОБРАТИМО.`)) return;
 
     try {
-      await axios.delete(`/api/equipment/${id}`);
+      await axios.delete(`${API_URL}/api/equipment/${id}`);
       
       setMainCategories(prev => prev.map(main => ({
         ...main,

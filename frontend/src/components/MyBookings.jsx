@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
 
 function MyBookings({ currentUser, onClose, onReturnComplete }) {
   const [bookings, setBookings] = useState([]);
@@ -12,7 +13,7 @@ function MyBookings({ currentUser, onClose, onReturnComplete }) {
   const loadMyBookings = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`/api/my-bookings?user=${encodeURIComponent(currentUser)}`);
+      const response = await axios.get(`${API_URL}/api/my-bookings?user=${encodeURIComponent(currentUser)}`);
       setBookings(response.data);
       setError(null);
     } catch (err) {
@@ -30,7 +31,7 @@ function MyBookings({ currentUser, onClose, onReturnComplete }) {
     setReturningIds(prev => [...prev, id]);
     
     try {
-      await axios.patch(`/api/equipment/${id}/status`, { status: 'available' });
+      await axios.patch(`${API_URL}/api/equipment/${id}/status`, { status: 'available' });
       
       // Обновляем локальный список
       setBookings(prev => prev.filter(item => item.id !== id));
@@ -55,7 +56,7 @@ const returnAll = async () => {
 
   try {
     const ids = bookings.map(item => item.id);
-    await axios.post('/api/equipment/bulk-return', { ids });
+    await axios.post(`${API_URL}/api/equipment/bulk-return`, { ids });
     
     // Очищаем список
     setBookings([]);
