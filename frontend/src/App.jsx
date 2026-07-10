@@ -7,26 +7,27 @@ function App() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [currentUser, setCurrentUser] = useState('');
+  const [showUserSelect, setShowUserSelect] = useState(false);
+  const [tempUser, setTempUser] = useState('');
 
-  // Проверяем, есть ли уже сессия
+  // Проверяем сессию при загрузке
   useEffect(() => {
     const auth = localStorage.getItem('studioAuth');
     const user = localStorage.getItem('currentUser');
-    if (auth === 'true') {
+    if (auth === 'true' && user) {
       setIsAuthenticated(true);
-      if (user) setCurrentUser(user);
+      setCurrentUser(user);
     }
   }, []);
 
+  // Вход по паролю
   const handleLogin = (e) => {
     e.preventDefault();
     const STUDIO_PASSWORD = 'kamfilm2026';
     
     if (password === STUDIO_PASSWORD) {
       localStorage.setItem('studioAuth', 'true');
-      localStorage.setItem('currentUser', 'Студия');
-      setCurrentUser('Студия');
-      setIsAuthenticated(true);
+      setShowUserSelect(true); // ← показываем выбор пользователя
       setError('');
       setPassword('');
     } else {
@@ -35,6 +36,21 @@ function App() {
     }
   };
 
+  // Выбор пользователя
+  const handleUserSelect = (e) => {
+    e.preventDefault();
+    if (!tempUser.trim()) {
+      setError('Введите имя пользователя');
+      return;
+    }
+    localStorage.setItem('currentUser', tempUser.trim());
+    setCurrentUser(tempUser.trim());
+    setIsAuthenticated(true);
+    setShowUserSelect(false);
+    setError('');
+  };
+
+  // Выход
   const handleLogout = () => {
     localStorage.removeItem('studioAuth');
     localStorage.removeItem('currentUser');
@@ -42,8 +58,8 @@ function App() {
     setCurrentUser('');
   };
 
-  // ===== СТРАНИЦА ВХОДА =====
-  if (!isAuthenticated) {
+  // ===== СТРАНИЦА ВХОДА (ПАРОЛЬ) =====
+  if (!isAuthenticated && !showUserSelect) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -72,7 +88,7 @@ function App() {
           <form onSubmit={handleLogin}>
             <input
               type="password"
-              placeholder="Введите пароль..."
+              placeholder="Пароль..."
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{
@@ -90,12 +106,7 @@ function App() {
             />
             
             {error && (
-              <p style={{ 
-                color: '#f44336', 
-                fontSize: '14px', 
-                marginTop: '12px', 
-                marginBottom: '0' 
-              }}>
+              <p style={{ color: '#f44336', fontSize: '14px', marginTop: '12px', marginBottom: '0' }}>
                 ❌ {error}
               </p>
             )}
@@ -119,14 +130,85 @@ function App() {
             </button>
           </form>
           
-          <p style={{ 
-            color: '#444', 
-            fontSize: '12px', 
-            marginTop: '20px', 
-            textAlign: 'center' 
-          }}>
+          <p style={{ color: '#444', fontSize: '12px', marginTop: '20px', textAlign: 'center' }}>
             Пароль: <span style={{ color: '#666', fontWeight: '500' }}>kamfilm2026</span>
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== СТРАНИЦА ВЫБОРА ПОЛЬЗОВАТЕЛЯ =====
+  if (showUserSelect) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#0b0b0b',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'sans-serif',
+        padding: '20px'
+      }}>
+        <div style={{
+          backgroundColor: '#1a1a1a',
+          padding: '40px',
+          borderRadius: '12px',
+          border: '1px solid #2a2a2a',
+          maxWidth: '400px',
+          width: '100%'
+        }}>
+          <h1 style={{ color: '#fff', marginTop: 0, fontSize: '24px', fontWeight: '300', letterSpacing: '2px' }}>
+            👤 Кто вы?
+          </h1>
+          <p style={{ color: '#888', marginBottom: '24px', fontSize: '14px' }}>
+            Введите ваше имя или выберите из списка
+          </p>
+          
+          <form onSubmit={handleUserSelect}>
+            <input
+              type="text"
+              placeholder="Ваше имя..."
+              value={tempUser}
+              onChange={(e) => setTempUser(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                backgroundColor: '#0b0b0b',
+                border: '1px solid #333',
+                borderRadius: '6px',
+                color: '#e0e0e0',
+                fontSize: '16px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                marginBottom: '12px'
+              }}
+              autoFocus
+            />
+            
+            {error && (
+              <p style={{ color: '#f44336', fontSize: '14px', marginBottom: '12px' }}>
+                ❌ {error}
+              </p>
+            )}
+            
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#4caf50',
+                border: 'none',
+                borderRadius: '6px',
+                color: '#0b0b0b',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer'
+              }}
+            >
+              Продолжить как {tempUser || '...'}
+            </button>
+          </form>
         </div>
       </div>
     );
