@@ -528,7 +528,8 @@ app.delete('/api/equipment/:id', async (req, res) => {
 
 app.get('/', (req, res) => res.send('Сервер работает!'));
 
-app.listen(port, '127.0.0.1', () => {
-  console.log(`Сервер запущен на http://127.0.0.1:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Сервер слушает 0.0.0.0:${port}`);
   console.log('Бронирование v2 подключено. Старые операции отключены.');
 });
+
