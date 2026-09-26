@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import axios from 'axios';
+import axios from '../api';
 import {
   displayDate,
   mutationError,
@@ -160,7 +160,6 @@ export default function CartPage({
     try {
       await axios.post('/api/booking-v2/reserve', {
         ids: cart.map(item => item.id),
-        user,
         startDate,
         endDate,
         comment: comment.trim() || null,

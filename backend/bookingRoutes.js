@@ -26,19 +26,7 @@ function getToday() {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function readUser(value) {
-  if (typeof value !== 'string') {
-    throw httpError(400, 'Укажите имя пользователя');
-  }
 
-  const user = value.trim();
-
-  if (!user || user.length > 100) {
-    throw httpError(400, 'Имя должно содержать от 1 до 100 символов');
-  }
-
-  return user;
-}
 
 function readIds(value) {
   if (
@@ -100,6 +88,16 @@ async function readCompleteList(query) {
 
 module.exports = function createBookingRoutes(supabase) {
   const router = express.Router();
+  router.use((req, res, next) => {
+  if (!req.account?.id) {
+    return res.status(401).json({
+      error: 'Необходимо войти в аккаунт',
+    });
+  }
+
+  next();
+});
+
 
   // Обработка ошибок работает и без Express 5.
   function handle(handler) {
@@ -114,6 +112,12 @@ module.exports = function createBookingRoutes(supabase) {
         }
 
         // Понятные сообщения, которые возвращают наши SQL-функции.
+        if (error.code === '42501') {
+  return res.status(403).json({
+    error: 'Нет доступа к этой операции или бронированию',
+  });
+}
+
         if (error.code === 'P0001') {
           return res.status(409).json({
             error: error.message,
@@ -210,11 +214,10 @@ module.exports = function createBookingRoutes(supabase) {
     });
   }));
 
-  // Незавершённые брони и выдачи конкретного пользователя.
-  //
-  // GET /api/booking-v2/mine?user=Имя
+// GET /api/booking-v2/mine
+// Владельца определяет сервер по токену.
+
   router.get('/mine', handle(async (req, res) => {
-    const user = readUser(req.query.user);
 
     const bookings = await readCompleteList(
       supabase
@@ -238,7 +241,7 @@ module.exports = function createBookingRoutes(supabase) {
             rented_until
           )
         `, { count: 'exact' })
-        .eq('booked_by', user)
+        .eq('user_id', req.account.id)
         .in('status', ['reserved', 'issued'])
         .order('start_date')
         .order('id')
@@ -259,7 +262,6 @@ module.exports = function createBookingRoutes(supabase) {
     const body = req.body || {};
 
     const ids = readIds(body.ids);
-    const user = readUser(body.user);
     const startDate = readDate(body.startDate, 'Начало');
     const endDate = readDate(body.endDate, 'Окончание');
 
@@ -284,7 +286,7 @@ module.exports = function createBookingRoutes(supabase) {
     // Там же проверяются ремонт, пересечения и вся корзина.
     const { data, error } = await supabase.rpc('studio_book', {
       p_ids: ids,
-      p_user: user,
+      p_user_id: req.account.id,
       p_start: startDate,
       p_end: endDate,
       p_comment: comment,
@@ -309,7 +311,6 @@ module.exports = function createBookingRoutes(supabase) {
       throw httpError(400, 'Некорректный ID брони');
     }
 
-    const user = readUser(body.user);
 
     if (!['issue', 'return', 'cancel'].includes(body.action)) {
       throw httpError(400, 'Неизвестное действие');
@@ -319,7 +320,7 @@ module.exports = function createBookingRoutes(supabase) {
       'studio_booking_action',
       {
         p_booking_id: req.params.id,
-        p_user: user,
+        p_user_id: req.account.id,
         p_action: body.action,
       }
     );
@@ -340,7 +341,6 @@ module.exports = function createBookingRoutes(supabase) {
       throw httpError(400, 'Некорректный ID оборудования');
     }
 
-    const user = readUser(body.user);
 
     if (!['start', 'finish'].includes(body.action)) {
       throw httpError(400, 'Неизвестное действие с ремонтом');
@@ -358,7 +358,7 @@ module.exports = function createBookingRoutes(supabase) {
 
     const { data, error } = await supabase.rpc('studio_repair_action', {
       p_equipment_id: req.params.id,
-      p_user: user,
+      p_user_id: req.account.id,
       p_action: body.action,
       p_comment: body.comment?.trim() || null,
     });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import axios from '../api';
 
 export function displayDate(value) {
   if (!value) return '—';

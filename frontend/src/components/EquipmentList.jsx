@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
+import axios from '../api';
 import CartPage from './CartPage';
 import MyBookings from './MyBookings';
 import EditorPanel from './EditorPanel';
@@ -86,7 +86,6 @@ const performRepair = async (id, action, comment = '') => {
     await axios.post(
       `${API_URL}/api/booking-v2/equipment/${id}/repair`,
       {
-        user: currentUser.trim(),
         action,
         comment: comment.trim() || null
       }

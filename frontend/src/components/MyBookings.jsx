@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import axios from 'axios';
+import axios from '../api';
 import {
   displayDate,
   mutationError,
@@ -17,9 +17,8 @@ export default function MyBookings({
   const [message, setMessage] = useState('');
   const actionLock = useRef(false);
 
-  const url = user
-    ? `/api/booking-v2/mine?user=${encodeURIComponent(user)}`
-    : null;
+  const url = '/api/booking-v2/mine';
+
 
   const { data, error, loading, reload } = useBookingData(url);
 
@@ -44,7 +43,6 @@ export default function MyBookings({
 
     try {
       await axios.post(`/api/booking-v2/${booking.id}/action`, {
-        user,
         action,
       });
     } catch (err) {

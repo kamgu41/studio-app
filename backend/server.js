@@ -3,6 +3,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { createClient } = require('@supabase/supabase-js');
 const createBookingRoutes = require('./bookingRoutes');
+const createAuthMiddleware = require('./authMiddleware');
+
 
 
 dotenv.config();
@@ -15,8 +17,25 @@ app.use(express.json());
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_KEY,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  }
 );
+// Все рабочие API-маршруты требуют подтверждённого аккаунта.
+app.use('/api', createAuthMiddleware(supabase));
+
+// Данные текущего пользователя для интерфейса.
+app.get('/api/me', (req, res) => {
+  res.json({
+    user: req.account,
+  });
+});
+
 // ============================================================
 // БРОНИРОВАНИЕ V2
 // ============================================================
