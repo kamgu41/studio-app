@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { createClient } = require('@supabase/supabase-js');
+const createBookingRoutes = require('./bookingRoutes');
+
 
 dotenv.config();
 
@@ -15,6 +17,44 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+// ============================================================
+// БРОНИРОВАНИЕ V2
+// ============================================================
+
+app.use('/api/booking-v2', createBookingRoutes(supabase));
+
+// Старые маршруты больше не должны менять учёт.
+// Блок обязательно находится ПЕРЕД прежними обработчиками.
+const legacyBookingDisabled = (req, res) => {
+  res.status(409).json({
+    error:
+      'Старый способ бронирования и изменения статуса отключён. Интерфейс переводится на бронирование v2.',
+  });
+};
+
+app.all('/api/equipment/bulk-book', legacyBookingDisabled);
+app.all('/api/equipment/bulk-return', legacyBookingDisabled);
+app.all('/api/equipment/:id/status', legacyBookingDisabled);
+app.all('/api/my-bookings', legacyBookingDisabled);
+
+// Нельзя создать предмет сразу в статусе "выдано",
+// минуя бронь и операцию выдачи.
+app.post('/api/equipment', (req, res, next) => {
+  const status = req.body?.status;
+
+  if (
+    status !== undefined &&
+    !['available', 'repair'].includes(status)
+  ) {
+    return res.status(400).json({
+      error:
+        'Новый предмет можно создать доступным или в ремонте. Выдача оформляется по брони.',
+    });
+  }
+
+  next();
+});
+
 
 // ============================================================
 // ОСНОВНЫЕ МАРШРУТЫ
@@ -469,6 +509,7 @@ app.delete('/api/equipment/:id', async (req, res) => {
 
 app.get('/', (req, res) => res.send('Сервер работает!'));
 
-app.listen(port, () => {
-  console.log(`Сервер запущен на http://localhost:${port}`);
+app.listen(port, '127.0.0.1', () => {
+  console.log(`Сервер запущен на http://127.0.0.1:${port}`);
+  console.log('Бронирование v2 подключено. Старые операции отключены.');
 });

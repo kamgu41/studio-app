@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
+const API_URL = '';
 
 function EditorPanel({ onClose, onUpdate, initialData }) {
   const [mainCategories, setMainCategories] = useState([]);
@@ -21,27 +21,54 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
   const [hasChanges, setHasChanges] = useState(false);
 
   // ===== ИНИЦИАЛИЗАЦИЯ =====
-  useEffect(() => {
-    if (initialData && initialData.length > 0) {
-      setMainCategories(JSON.parse(JSON.stringify(initialData))); // глубокое копирование
-      setLoading(false);
-    } else {
-      loadData();
-    }
-  }, []);
+  const initialDataRef = useRef(initialData);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${API_URL}/api/full-hierarchy`);
-      setMainCategories(response.data);
-      setMessage('');
-    } catch (err) {
-      setMessage('❌ Ошибка загрузки: ' + err.message);
-    } finally {
+  useEffect(() => {
+    let ignore = false;
+    const startingData = initialDataRef.current;
+
+    if (Array.isArray(startingData) && startingData.length > 0) {
+      setMainCategories(JSON.parse(JSON.stringify(startingData)));
       setLoading(false);
+      return;
     }
-  };
+
+    const loadData = async () => {
+      setLoading(true);
+
+      try {
+        const response = await axios.get(
+          `${API_URL}/api/full-hierarchy`
+        );
+
+        if (!Array.isArray(response.data)) {
+          throw new Error('Сервер вернул некорректный список категорий');
+        }
+
+        if (!ignore) {
+          setMainCategories(response.data);
+          setMessage('');
+        }
+      } catch (err) {
+        if (!ignore) {
+          setMessage(
+            '❌ Ошибка загрузки: ' +
+            (err.response?.data?.error || err.message)
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadData();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   // ===== ОБНОВЛЕНИЕ ПОСЛЕ ИЗМЕНЕНИЙ =====
   const markChanged = () => setHasChanges(true);
@@ -70,7 +97,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
     }
 
     try {
-      await axios.post(`${API_URL}/api/sub-category`, {
+      const response = await axios.post(`${API_URL}/api/sub-category`, {
         name: newSubName.trim(),
         main_category_id: mainId
       });
@@ -155,7 +182,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
 
   try {
     // 1. Создаём предмет
-    await axios.post(`${API_URL}/api/equipment`, {
+    const response = await axios.post(`${API_URL}/api/equipment`, {
       name: newItemName.trim(),
       description: 'Временная категория',
       status: 'available',
@@ -360,7 +387,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
             </h1>
             <p style={{ fontSize: '13px', color: '#555', margin: '6px 0 0 0' }}>
               {totalItems} позиций
-              {hasChanges && <span style={{ color: '#ffc107', marginLeft: '12px' }}>● Есть изменения</span>}
+              {hasChanges && <span style={{ color: '#ffc107', marginLeft: '12px' }}>● Изменения отправлены на сервер</span>}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -377,7 +404,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                 cursor: 'pointer'
               }}
             >
-              {hasChanges ? '✅ Сохранить и закрыть' : '✕ Закрыть'}
+              {hasChanges ? '✅ Готово — закрыть' : '✕ Закрыть'}
             </button>
           </div>
         </div>

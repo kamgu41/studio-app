@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import CartPage from './CartPage';
 import MyBookings from './MyBookings';
 import EditorPanel from './EditorPanel';
+import { displayDate, mutationError } from './bookingUi';
 
-const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
+
+const API_URL = '';
+
 
 function EquipmentList({ currentUser }) {
   const [loading, setLoading] = useState(true);
@@ -26,6 +29,11 @@ function EquipmentList({ currentUser }) {
   const [showRepairDetails, setShowRepairDetails] = useState(false);
   const [repairDetailsItem, setRepairDetailsItem] = useState(null);
 
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [repairBusy, setRepairBusy] = useState(false);
+  const repairLock = useRef(false);
+
+
   // ===== ЗАГРУЗКА ДАННЫХ =====
   const loadEquipment = async () => {
     try {
@@ -36,6 +44,7 @@ function EquipmentList({ currentUser }) {
       
       console.log('✅ Данные загружены:', response.data.length, 'категорий');
       setMainCategories(response.data);
+      setHasLoaded(true);
       setError(null);
     } catch (err) {
       console.error('❌ Ошибка загрузки:', err);
@@ -52,45 +61,73 @@ function EquipmentList({ currentUser }) {
     }));
   };
 
-  // ===== ИЗМЕНЕНИЕ СТАТУСА =====
-  const changeStatus = async (id, newStatus) => {
-    try {
-      await axios.patch(`${API_URL}/api/equipment/${id}/status`, { status: newStatus });
-      loadEquipment();
-    } catch (err) {
-      alert('Ошибка при изменении статуса: ' + err.message);
-    }
-  };
+  // ===== РЕМОНТ ЧЕРЕЗ API V2 =====
 
-  // ===== РЕМОНТ =====
-  const openRepairModal = (id) => {
-    setRepairItemId(id);
-    setRepairComment('');
-    setShowRepairModal(true);
-  };
+const openRepairModal = (id) => {
+  if (repairLock.current) return;
 
-  const confirmRepair = async () => {
-    if (!repairItemId) return;
-    
-    try {
-      await axios.patch(`${API_URL}/api/equipment/${repairItemId}/status`, {
-        status: 'repair',
-        repairComment: repairComment.trim() || 'Не указано',
-        rentedBy: currentUser
-      });
-      
-      loadEquipment();
+  setRepairItemId(id);
+  setRepairComment('');
+  setShowRepairModal(true);
+};
+
+const performRepair = async (id, action, comment = '') => {
+  if (repairLock.current) return;
+
+  if (typeof currentUser !== 'string' || !currentUser.trim()) {
+    alert('Сначала выберите пользователя');
+    return;
+  }
+
+  repairLock.current = true;
+  setRepairBusy(true);
+
+  try {
+    await axios.post(
+      `${API_URL}/api/booking-v2/equipment/${id}/repair`,
+      {
+        user: currentUser.trim(),
+        action,
+        comment: comment.trim() || null
+      }
+    );
+
+    if (action === 'start') {
+      setCart(previous => previous.filter(item => item.id !== id));
       setShowRepairModal(false);
       setRepairItemId(null);
       setRepairComment('');
-      
-      if (cart.find(item => item.id === repairItemId)) {
-        setCart(prev => prev.filter(item => item.id !== repairItemId));
-      }
-    } catch (err) {
-      alert('Ошибка при отправке в ремонт: ' + err.message);
     }
-  };
+
+    await loadEquipment();
+  } catch (err) {
+    alert(mutationError(err));
+
+    // Даже при потерянном ответе операция могла сохраниться.
+    // Пытаемся получить актуальное состояние оборудования.
+    await loadEquipment();
+  } finally {
+    repairLock.current = false;
+    setRepairBusy(false);
+  }
+};
+
+const confirmRepair = async () => {
+  if (!repairItemId) return;
+
+  await performRepair(repairItemId, 'start', repairComment);
+};
+
+const finishRepair = async (id) => {
+  if (repairLock.current) return;
+
+  if (!window.confirm('Ремонт завершён, предмет снова исправен?')) {
+    return;
+  }
+
+  await performRepair(id, 'finish');
+};
+
 
   const openRepairDetails = (item) => {
     setRepairDetailsItem(item);
@@ -99,18 +136,25 @@ function EquipmentList({ currentUser }) {
 
   // ===== КОРЗИНА =====
   const addToCart = (item) => {
-    if (cart.find(cartItem => cartItem.id === item.id)) {
-      setCart(prev => prev.filter(cartItem => cartItem.id !== item.id));
-      return;
-    }
-    
-    if (item.status !== 'available') {
-      alert('Это оборудование сейчас недоступно');
-      return;
-    }
-    
-    setCart([...cart, item]);
-  };
+  const alreadyInCart = cart.some(entry => entry.id === item.id);
+
+  if (alreadyInCart) {
+    setCart(previous => previous.filter(entry => entry.id !== item.id));
+    return;
+  }
+
+  if (!['available', 'rented'].includes(item.status)) {
+    alert('Предмет в ремонте или имеет неподдерживаемый статус');
+    return;
+  }
+
+  setCart(previous =>
+    previous.some(entry => entry.id === item.id)
+      ? previous
+      : [...previous, item]
+  );
+};
+
 
   useEffect(() => {
     loadEquipment();
@@ -123,11 +167,11 @@ function EquipmentList({ currentUser }) {
 
   const isMobile = window.innerWidth < 600;
 
-  if (loading) {
+  if (loading && !hasLoaded) {
     return <div style={{ textAlign: 'center', padding: '40px', color: '#aaa' }}>⏳ Загрузка...</div>;
   }
 
-  if (error) {
+  if (error && !hasLoaded) {
     return <div style={{ color: '#f44336', textAlign: 'center', padding: '40px' }}>{error}</div>;
   }
 
@@ -267,6 +311,42 @@ function EquipmentList({ currentUser }) {
             </button>
           </div>
         </header>
+        <div style={{
+  display: 'flex',
+  alignItems: 'center',
+  gap: '12px',
+  flexWrap: 'wrap',
+  marginBottom: '12px'
+}}>
+  <button
+    type="button"
+    onClick={loadEquipment}
+    disabled={loading || repairBusy}
+    style={{
+      padding: '6px 12px',
+      backgroundColor: '#1a1a1a',
+      border: '1px solid #333',
+      borderRadius: '6px',
+      color: '#aaa',
+      cursor: loading ? 'default' : 'pointer'
+    }}
+  >
+    {loading ? 'Обновление…' : 'Обновить список'}
+  </button>
+
+  <span style={{ color: '#888', fontSize: '12px' }}>
+    Статус показывает физическое состояние.
+    Свободные даты проверяются в корзине.
+  </span>
+</div>
+
+{error && (
+  <p role="alert" style={{ color: '#ffb4b4' }}>
+    {error} Показаны ранее загруженные данные.
+  </p>
+)}
+
+
 
         {/* ===== ВКЛАДКИ (АДАПТИВНЫЕ) ===== */}
         <div style={{
@@ -480,7 +560,6 @@ function EquipmentList({ currentUser }) {
   key={item.id}
   style={{
     display: 'flex',
-    alignItems: 'center',
     justifyContent: 'space-between',
     padding: isMobile ? '8px 8px' : '4px 12px',
     borderRadius: '4px',
@@ -533,7 +612,7 @@ function EquipmentList({ currentUser }) {
         👤 {item.rented_by}
         {item.rented_until && (
           <span style={{ color: '#666', fontSize: isMobile ? '8px' : '10px', marginLeft: '2px' }}>
-            до {new Date(item.rented_until).toLocaleDateString()}
+            до {displayDate(item.rented_until)}
           </span>
         )}
         {item.booking_comment && (
@@ -570,7 +649,7 @@ function EquipmentList({ currentUser }) {
     {!isRented && (
       <div style={{ display: 'flex', gap: isMobile ? '4px' : '2px', flexShrink: 0 }}>
         <button
-          onClick={() => changeStatus(item.id, 'available')}
+          onClick={() => finishRepair(item.id)}
           style={{
             padding: isMobile ? '4px 10px' : '2px 8px',
             fontSize: isMobile ? '11px' : '11px',
@@ -585,9 +664,11 @@ function EquipmentList({ currentUser }) {
             whiteSpace: 'nowrap',
             minHeight: isMobile ? '32px' : 'auto'
           }}
-          disabled={isAvailable}
+          disabled={isAvailable || repairBusy}
+
         >
-          ДОСТУПЕН
+          {isRepair ? 'ИЗ РЕМОНТА' : 'НА СКЛАДЕ'}
+
         </button>
         <button
           onClick={() => openRepairModal(item.id)}
@@ -605,16 +686,24 @@ function EquipmentList({ currentUser }) {
             whiteSpace: 'nowrap',
             minHeight: isMobile ? '32px' : 'auto'
           }}
-          disabled={isRepair}
+          disabled={isRepair || repairBusy}
         >
           РЕМОНТ
         </button>
       </div>
     )}
 
-    {isAvailable && (
-      <button
-        onClick={() => addToCart(item)}
+    {(isAvailable || isRented) && (
+  <button
+    title={
+      isInCart
+        ? 'Убрать из корзины'
+        : isRented
+          ? 'Выбрать даты после текущей выдачи'
+          : 'Выбрать даты бронирования'
+    }
+    onClick={() => addToCart(item)}
+
         style={{
           padding: isMobile ? '4px 10px' : '2px 8px',
           fontSize: isMobile ? '11px' : '11px',
@@ -679,30 +768,19 @@ function EquipmentList({ currentUser }) {
           overflow: 'auto',
           padding: isMobile ? '10px' : '20px'
         }}>
-          <CartPage 
+          <CartPage
             cart={cart}
             setCart={setCart}
             onClose={() => setShowCart(false)}
             onBookingComplete={() => {
-              setShowCart(false);
-              setCart([]);
-              const bookedIds = cart.map(item => item.id);
-              setMainCategories(prevCategories => 
-                prevCategories.map(main => ({
-                  ...main,
-                  subCategories: main.subCategories?.map(sub => ({
-                    ...sub,
-                    items: sub.items?.map(item => 
-                      bookedIds.includes(item.id) 
-                        ? { ...item, status: 'rented', rented_by: currentUser, rented_until: new Date().toISOString().split('T')[0] }
-                        : item
-                    )
-                  }))
-                }))
-              );
-            }}
+  setShowCart(false);
+  setCart([]);
+  return loadEquipment();
+}}
+
             currentUser={currentUser}
           />
+
         </div>
       )}
 
@@ -719,41 +797,11 @@ function EquipmentList({ currentUser }) {
           padding: isMobile ? '10px' : '20px'
         }}>
           <MyBookings
-            currentUser={currentUser}
-            onClose={() => setShowMyBookings(false)}
-            onReturnComplete={(returnedId) => {
-              if (returnedId === null) {
-                setMainCategories(prevCategories =>
-                  prevCategories.map(main => ({
-                    ...main,
-                    subCategories: main.subCategories?.map(sub => ({
-                      ...sub,
-                      items: sub.items?.map(item =>
-                        item.status === 'rented' && item.rented_by === currentUser
-                          ? { ...item, status: 'available', rented_by: null, rented_until: null, booking_comment: null }
-                          : item
-                      )
-                    }))
-                  }))
-                );
-                setShowMyBookings(false);
-              } else {
-                setMainCategories(prevCategories =>
-                  prevCategories.map(main => ({
-                    ...main,
-                    subCategories: main.subCategories?.map(sub => ({
-                      ...sub,
-                      items: sub.items?.map(item =>
-                        item.id === returnedId
-                          ? { ...item, status: 'available', rented_by: null, rented_until: null, booking_comment: null }
-                          : item
-                      )
-                    }))
-                  }))
-                );
-              }
-            }}
-          />
+  currentUser={currentUser}
+  onBookingsChanged={loadEquipment}
+  onClose={() => setShowMyBookings(false)}
+/>
+
         </div>
       )}
 
@@ -786,8 +834,16 @@ function EquipmentList({ currentUser }) {
             <p style={{ color: '#888', fontSize: '14px', marginBottom: '16px' }}>
               Опишите, что сломалось или что нужно починить:
             </p>
+            <p style={{ color: '#e0ae61', fontSize: '13px' }}>
+  Существующие брони сохранятся, но выдача будет заблокирована
+  до окончания ремонта. При необходимости согласуйте отмену
+  с владельцами броней.
+</p>
+
             
             <textarea
+              maxLength={2000}
+              disabled={repairBusy}
               value={repairComment}
               onChange={(e) => setRepairComment(e.target.value)}
               placeholder="Например: не фокусируется объектив, трещина на корпусе..."
@@ -803,6 +859,7 @@ function EquipmentList({ currentUser }) {
                 resize: 'vertical',
                 outline: 'none',
                 fontFamily: 'inherit'
+
               }}
               autoFocus
             />
@@ -827,7 +884,9 @@ function EquipmentList({ currentUser }) {
                   color: '#aaa',
                   fontSize: '14px',
                   cursor: 'pointer'
+
                 }}
+                disabled={repairBusy}
               >
                 Отмена
               </button>
@@ -844,8 +903,9 @@ function EquipmentList({ currentUser }) {
                   fontWeight: '500',
                   cursor: 'pointer'
                 }}
+                disabled={repairBusy}
               >
-                ✅ Отправить в ремонт
+                {repairBusy ? 'Сохранение…' : '✅ Отправить в ремонт'}
               </button>
             </div>
           </div>

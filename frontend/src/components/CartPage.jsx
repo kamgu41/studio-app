@@ -1,475 +1,430 @@
-import React, { useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import axios from 'axios';
-import { addDays, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
-import { ru } from 'date-fns/locale';
-const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
+import {
+  displayDate,
+  mutationError,
+  ui,
+  useBookingData,
+} from './bookingUi';
 
-function CartPage({ cart, setCart, onClose, onBookingComplete, currentUser }) {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedStart, setSelectedStart] = useState(null);
-  const [selectedEnd, setSelectedEnd] = useState(null);
-  const [selecting, setSelecting] = useState(false);
-  const [loading, setLoading] = useState(false);
+function moveMonth(month, offset) {
+  // Это только арифметика месяцев в UTC, не перевод выбранной даты.
+  const date = new Date(`${month}-01T12:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + offset);
+  return date.toISOString().slice(0, 7);
+}
+
+function getMonthDays(month) {
+  const [year, number] = month.split('-').map(Number);
+  const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
+
+  return Array.from(
+    { length: count },
+    (_, index) => `${month}-${String(index + 1).padStart(2, '0')}`
+  );
+}
+
+export default function CartPage({
+  cart,
+  setCart,
+  onClose,
+  onBookingComplete,
+  currentUser,
+}) {
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [visibleMonth, setVisibleMonth] = useState('');
   const [comment, setComment] = useState('');
-  
-  const [bookedDates, setBookedDates] = useState([]);
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState('');
+  const submitLock = useRef(false);
 
-  // Загрузка занятых дат (заглушка)
-  const loadBookedDates = async () => {
-    try {
-      // Пока пусто, потом подключим реальные данные
-      setBookedDates([]);
-    } catch (err) {
-      console.error('❌ Ошибка загрузки бронирований:', err);
-      setBookedDates([]);
-    }
-  };
+  const idsKey = cart.map(item => item.id).sort().join(',');
+  const user = typeof currentUser === 'string' ? currentUser.trim() : '';
 
-  useEffect(() => {
-    loadBookedDates();
-  }, [cart]);
+  const url = idsKey
+    ? `/api/booking-v2/availability?ids=${encodeURIComponent(idsKey)}`
+    : null;
 
-  // Проверка занятости даты
-  const isDateBusy = (date) => {
-    for (let b of bookedDates) {
-      const start = new Date(b.start);
-      const end = new Date(b.end);
-      if (date >= start && date <= end) {
-        return b.type;
-      }
-    }
-    return null;
-  };
+  const { data, error, loading, reload } = useBookingData(url);
 
-  // Выбор даты
-  const handleDateClick = (date) => {
-    if (isDateBusy(date)) return;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selectedDate = new Date(date);
-    selectedDate.setHours(0, 0, 0, 0);
-    
-    if (selectedDate < today) return;
+  const today = data?.today || '';
+  const bookings = data?.bookings || [];
+  const equipment = data?.equipment || [];
+  const ready =
+    Boolean(data) &&
+    Array.isArray(data.equipment) &&
+    data.equipment.length === cart.length;
 
-    if (!selecting) {
-      setSelectedStart(date);
-      setSelectedEnd(null);
-      setSelecting(true);
-    } else {
-      if (date >= selectedStart) {
-        setSelectedEnd(date);
-      } else {
-        setSelectedStart(date);
-        setSelectedEnd(null);
-      }
-      setSelecting(false);
-    }
-  };
+  const month = visibleMonth || today.slice(0, 7);
+  const days = month ? getMonthDays(month) : [];
 
-  const isDateSelected = (date) => {
-    if (!selectedStart) return false;
-    if (!selectedEnd) return isSameDay(date, selectedStart);
-    return date >= selectedStart && date <= selectedEnd;
-  };
+  const offset = month
+    ? (new Date(`${month}-01T12:00:00Z`).getUTCDay() + 6) % 7
+    : 0;
 
-  // Навигация по месяцам
-  const goToPrevMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  };
+  const monthTitle = month
+    ? new Date(`${month}-01T12:00:00Z`).toLocaleDateString('ru-RU', {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      })
+    : '';
 
-  const goToNextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-  };
+  // Запрет на все даты: ремонт, просроченная или несвязанная выдача.
+  const blockedItems = equipment.filter(item => {
+    if (item.status === 'repair') return true;
+    if (item.status !== 'rented') return false;
 
-  // Управление корзиной
-  const removeFromCart = (itemId) => {
-    setCart(cart.filter(item => item.id !== itemId));
-  };
+    const hasIssuedBooking = bookings.some(
+      booking =>
+        booking.equipment_id === item.id &&
+        booking.status === 'issued'
+    );
 
-  const clearCart = () => {
-    if (window.confirm('Очистить корзину?')) {
-      setCart([]);
-    }
-  };
-
-  // Основная функция бронирования
-  const confirmBooking = async () => {
-    if (!selectedStart || !selectedEnd) {
-      alert('Выберите даты бронирования');
-      return;
-    }
-
-    // Проверяем занятость дат
-    let isBusy = false;
-    let currentDate = new Date(selectedStart);
-    const endDate = new Date(selectedEnd);
-    
-    while (currentDate <= endDate) {
-      const status = isDateBusy(currentDate);
-      if (status === 'rented') {
-        isBusy = true;
-        alert(`❌ Дата ${format(currentDate, 'dd.MM.yyyy')} уже занята!`);
-        break;
-      }
-      if (status === 'repair') {
-        isBusy = true;
-        alert(`🔧 Дата ${format(currentDate, 'dd.MM.yyyy')} - оборудование в ремонте!`);
-        break;
-      }
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    if (isBusy) return;
-
-    setLoading(true);
-
-    try {
-      const ids = cart.map(item => item.id);
-      await axios.post(`${API_URL}/api/equipment/bulk-book`, {
-        ids: ids,
-        rentedBy: currentUser,
-        rentedUntil: selectedEnd.toISOString().split('T')[0],
-        comment: comment || null
-      });
-
-      onBookingComplete();
-      setCart([]);
-      setSelectedStart(null);
-      setSelectedEnd(null);
-      setSelecting(false);
-      setComment('');
-      
-      alert(`✅ Бронирование оформлено!\n${cart.length} позиций\nс ${format(selectedStart, 'dd.MM.yyyy')} по ${format(selectedEnd, 'dd.MM.yyyy')}\nКто взял: ${currentUser}`);
-    } catch (err) {
-      alert('Ошибка при бронировании: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Генерация календаря
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  
-  const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-  const firstDayOffset = monthStart.getDay() === 0 ? 6 : monthStart.getDay() - 1;
-
-  if (cart.length === 0) {
     return (
-      <div style={{
-        maxWidth: '600px',
-        margin: '40px auto',
-        padding: '40px',
-        backgroundColor: '#111',
-        borderRadius: '12px',
-        border: '1px solid #2a2a2a',
-        textAlign: 'center'
-      }}>
-        <h2 style={{ color: '#666' }}>🛒 Корзина пуста</h2>
-        <p style={{ color: '#555' }}>Добавьте оборудование из списка</p>
-        <button onClick={onClose} style={{
-          marginTop: '20px',
-          padding: '8px 24px',
-          backgroundColor: '#333',
-          border: 'none',
-          borderRadius: '4px',
-          color: '#aaa',
-          cursor: 'pointer'
-        }}>
-          ← Вернуться к списку
+      !item.rented_until ||
+      item.rented_until < today ||
+      !hasIssuedBooking
+    );
+  });
+
+  const conflicts = startDate && endDate
+    ? bookings.filter(
+        booking =>
+          booking.start_date <= endDate &&
+          startDate <= booking.end_date
+      )
+    : [];
+
+  let problem = '';
+
+  if (!user) {
+    problem = 'Сначала укажите пользователя.';
+  } else if (blockedItems.length) {
+    problem =
+      'Недоступны для нового бронирования: ' +
+      blockedItems.map(item => item.name).join(', ') +
+      '. Уберите их из корзины или сначала оформите возврат/ремонт.';
+  } else if (startDate && startDate < today) {
+    problem = 'Начало не может быть раньше сегодняшней даты на Камчатке.';
+  } else if (startDate && endDate && endDate < startDate) {
+    problem = 'Окончание не может быть раньше начала.';
+  } else if (conflicts.length) {
+    const names = [...new Set(conflicts.map(booking =>
+      equipment.find(item => item.id === booking.equipment_id)?.name ||
+      'Неизвестный предмет'
+    ))];
+
+    problem = 'В выбранном периоде заняты: ' + names.join(', ');
+  }
+
+  const canSubmit =
+    ready &&
+    !loading &&
+    !error &&
+    !sending &&
+    Boolean(startDate && endDate) &&
+    !problem;
+
+  function isBusy(date) {
+    return blockedItems.length > 0 || bookings.some(
+      booking =>
+        booking.start_date <= date &&
+        date <= booking.end_date
+    );
+  }
+
+  function chooseDate(date) {
+    if (sending || !ready || date < today || isBusy(date)) return;
+
+    setMessage('');
+
+    if (!startDate || endDate || date < startDate) {
+      setStartDate(date);
+      setEndDate('');
+    } else {
+      setEndDate(date);
+    }
+  }
+
+  async function confirmBooking() {
+    if (!canSubmit || submitLock.current) return;
+
+    submitLock.current = true;
+    setSending(true);
+    setMessage('');
+
+    const quantity = cart.length;
+
+    try {
+      await axios.post('/api/booking-v2/reserve', {
+        ids: cart.map(item => item.id),
+        user,
+        startDate,
+        endDate,
+        comment: comment.trim() || null,
+      });
+    } catch (err) {
+      setMessage(mutationError(err));
+      reload();
+      return;
+    } finally {
+      submitLock.current = false;
+      setSending(false);
+    }
+
+    // Ошибка обновления родителя не должна считаться ошибкой бронирования.
+    setCart([]);
+
+    window.alert(
+      `Бронь создана: ${quantity} позиций.\n` +
+      `${displayDate(startDate)} — ${displayDate(endDate)}.\n` +
+      'Оборудование ещё не выдано.'
+    );
+
+    try {
+      await onBookingComplete?.();
+    } catch (err) {
+      console.error('Бронь сохранена, но список не обновился:', err);
+      window.alert('Бронь сохранена. Обновите страницу для обновления списка.');
+    }
+  }
+
+  if (!cart.length) {
+    return (
+      <div style={ui.page}>
+        <h2>Корзина пуста</h2>
+        <button type="button" style={ui.button} onClick={onClose}>
+          Вернуться к списку
         </button>
       </div>
     );
   }
 
   return (
-    <div style={{
-      maxWidth: '900px',
-      margin: '0 auto',
-      padding: '20px'
-    }}>
-      {/* Шапка корзины */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '24px',
-        borderBottom: '1px solid #2a2a2a',
-        paddingBottom: '16px',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
+    <div style={ui.page}>
+      <div style={ui.row}>
         <div>
-          <h2 style={{ margin: 0, color: '#fff' }}>
-            🛒 Корзина <span style={{ color: '#666', fontWeight: '300' }}>({cart.length})</span>
-          </h2>
-          <p style={{ margin: '4px 0 0', color: '#555', fontSize: '13px' }}>
-            {cart.length} позиций готовы к бронированию
-          </p>
-          {currentUser && (
-            <p style={{ margin: '4px 0 0', color: '#4caf50', fontSize: '13px' }}>
-              👤 Бронирует: {currentUser}
-            </p>
-          )}
+          <h2>Корзина: {cart.length}</h2>
+          <p style={ui.muted}>Бронирует: {user || 'не выбран'}</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={clearCart} style={{
-            padding: '6px 16px',
-            backgroundColor: '#333',
-            border: 'none',
-            borderRadius: '4px',
-            color: '#888',
-            fontSize: '13px',
-            cursor: 'pointer'
-          }}>
-            Очистить
-          </button>
-          <button onClick={onClose} style={{
-            padding: '6px 16px',
-            backgroundColor: '#333',
-            border: 'none',
-            borderRadius: '4px',
-            color: '#aaa',
-            fontSize: '13px',
-            cursor: 'pointer'
-          }}>
-            ✕ Закрыть
-          </button>
-        </div>
+
+        <button
+          type="button"
+          style={ui.button}
+          disabled={sending}
+          onClick={onClose}
+        >
+          Закрыть
+        </button>
       </div>
 
-      {/* Список в корзине */}
-      <div style={{ marginBottom: '24px' }}>
-        {cart.map((item) => (
-          <div key={item.id} style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            backgroundColor: '#111',
-            borderRadius: '6px',
-            marginBottom: '4px',
-            borderLeft: '3px solid #4caf50'
-          }}>
-            <span style={{ color: '#ddd' }}>{item.name}</span>
-            <button onClick={() => removeFromCart(item.id)} style={{
-              background: 'none',
-              border: 'none',
-              color: '#666',
-              cursor: 'pointer',
-              fontSize: '14px',
-              padding: '4px 8px'
-            }}
-            onMouseEnter={(e) => e.target.style.color = '#f44336'}
-            onMouseLeave={(e) => e.target.style.color = '#666'}>
-              ✕ Удалить
+      <div style={ui.panel}>
+        {cart.map(item => (
+          <div
+            key={item.id}
+            style={{ ...ui.row, padding: '8px 0' }}
+          >
+            <span>{item.name}</span>
+            <button
+              type="button"
+              style={ui.button}
+              disabled={sending}
+              onClick={() => {
+                setMessage('');
+                setCart(previous =>
+                  previous.filter(entry => entry.id !== item.id)
+                );
+              }}
+            >
+              Удалить
             </button>
           </div>
         ))}
       </div>
 
-      {/* Календарь */}
-      <div style={{
-        backgroundColor: '#111',
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '24px',
-        border: '1px solid #2a2a2a'
-      }}>
-        <h3 style={{ color: '#fff', marginTop: 0, fontSize: '16px' }}>
-          📅 Выберите даты аренды
-        </h3>
-        <p style={{ color: '#666', fontSize: '13px', marginBottom: '16px' }}>
-          🟢 Выбранный период
+      <div style={ui.panel}>
+        <div style={ui.row}>
+          <h3>Даты бронирования</h3>
+          <button
+            type="button"
+            style={ui.button}
+            disabled={loading || sending}
+            onClick={reload}
+          >
+            Обновить занятость
+          </button>
+        </div>
+
+        <p style={ui.muted}>
+          Камчатка · обе даты включительно
+          {today ? ` · сегодня ${displayDate(today)}` : ''}
         </p>
-        
-        {/* Навигация */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px'
-        }}>
-          <button onClick={goToPrevMonth} style={{
-            background: 'none',
-            border: '1px solid #333',
-            borderRadius: '4px',
-            color: '#888',
-            padding: '4px 12px',
-            cursor: 'pointer'
-          }}>
-            ←
-          </button>
-          <span style={{ color: '#e0e0e0', fontWeight: '500' }}>
-            {format(currentMonth, 'LLLL yyyy', { locale: ru })}
-          </span>
-          <button onClick={goToNextMonth} style={{
-            background: 'none',
-            border: '1px solid #333',
-            borderRadius: '4px',
-            color: '#888',
-            padding: '4px 12px',
-            cursor: 'pointer'
-          }}>
-            →
-          </button>
-        </div>
 
-        {/* Сетка календаря */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(7, 1fr)',
-          gap: '4px'
-        }}>
-          {weekDays.map((day) => (
-            <div key={day} style={{
-              textAlign: 'center',
-              color: '#666',
-              fontSize: '12px',
-              padding: '8px 0',
-              fontWeight: '500'
-            }}>
-              {day}
-            </div>
-          ))}
+        {loading && <p>Загрузка занятых дат…</p>}
+        {error && <p role="alert" style={ui.error}>{error}</p>}
 
-          {Array.from({ length: firstDayOffset }).map((_, i) => (
-            <div key={`empty-${i}`} />
-          ))}
+        {data && !ready && (
+          <p role="alert" style={ui.error}>
+            Получен неполный список оборудования. Бронирование заблокировано.
+          </p>
+        )}
 
-          {daysInMonth.map((date) => {
-            const status = isDateBusy(date);
-            const isSelected = isDateSelected(date);
-            const isToday = isSameDay(date, new Date());
-            const isPast = date < new Date() && !isToday;
-
-            let backgroundColor = 'transparent';
-            let textColor = '#e0e0e0';
-            let cursor = 'pointer';
-            let border = 'none';
-
-            if (status === 'rented') {
-              backgroundColor = '#b91c1c';
-              textColor = '#fff';
-              cursor = 'default';
-            } else if (status === 'repair') {
-              backgroundColor = '#b45309';
-              textColor = '#fff';
-              cursor = 'default';
-            } else if (isSelected) {
-              backgroundColor = '#4caf50';
-              textColor = '#0b0b0b';
-            } else if (isPast) {
-              textColor = '#444';
-              cursor = 'default';
-            }
-
-            if (isToday && !status && !isSelected) {
-              border = '2px solid #4caf50';
-            }
-
-            return (
-              <div
-                key={date.toISOString()}
-                onClick={() => handleDateClick(date)}
-                style={{
-                  aspectRatio: '1',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor,
-                  color: textColor,
-                  borderRadius: '4px',
-                  cursor,
-                  border,
-                  fontSize: '14px',
-                  fontWeight: isSelected ? '600' : '400',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (!status && !isPast && !isSelected) {
-                    e.target.style.backgroundColor = '#2a2a2a';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!status && !isPast && !isSelected) {
-                    e.target.style.backgroundColor = 'transparent';
-                  }
-                }}
+        {ready && (
+          <>
+            <div style={ui.row}>
+              <button
+                type="button"
+                style={ui.button}
+                disabled={sending}
+                onClick={() => setVisibleMonth(moveMonth(month, -1))}
+                aria-label="Предыдущий месяц"
               >
-                {date.getDate()}
-              </div>
-            );
-          })}
-        </div>
+                ←
+              </button>
 
-        {/* Инструкция */}
-        <div style={{
-          marginTop: '16px',
-          color: '#555',
-          fontSize: '12px',
-          textAlign: 'center'
-        }}>
-          {selectedStart && !selectedEnd 
-            ? `Выбрано начало: ${format(selectedStart, 'dd.MM.yyyy')}. Кликните на дату окончания.`
-            : selectedStart && selectedEnd 
-            ? `Выбран период: ${format(selectedStart, 'dd.MM.yyyy')} — ${format(selectedEnd, 'dd.MM.yyyy')}`
-            : 'Кликните на дату начала, затем на дату окончания'}
-        </div>
+              <strong>{monthTitle}</strong>
+
+              <button
+                type="button"
+                style={ui.button}
+                disabled={sending}
+                onClick={() => setVisibleMonth(moveMonth(month, 1))}
+                aria-label="Следующий месяц"
+              >
+                →
+              </button>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+              gap: 4,
+              marginTop: 16,
+            }}>
+              {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => (
+                <div
+                  key={day}
+                  style={{ ...ui.muted, textAlign: 'center', padding: 6 }}
+                >
+                  {day}
+                </div>
+              ))}
+
+              {Array.from({ length: offset }, (_, index) => (
+                <div key={`space-${index}`} />
+              ))}
+
+              {days.map(date => {
+                const busy = isBusy(date);
+                const past = date < today;
+                const selected =
+                  date === startDate ||
+                  Boolean(
+                    startDate && endDate &&
+                    startDate <= date && date <= endDate
+                  );
+
+                return (
+                  <button
+                    type="button"
+                    key={date}
+                    disabled={sending || busy || past}
+                    onClick={() => chooseDate(date)}
+                    title={busy ? 'Хотя бы один предмет недоступен' : date}
+                    style={{
+                      ...ui.button,
+                      padding: '12px 0',
+                      opacity: past ? 0.35 : 1,
+                      background: busy
+                        ? '#792727'
+                        : selected ? '#2f7d44' : '#202020',
+                      border: date === today
+                        ? '2px solid #74c98c'
+                        : '1px solid #333',
+                    }}
+                  >
+                    {Number(date.slice(-2))}
+                  </button>
+                );
+              })}
+            </div>
+
+            <p style={ui.muted}>
+              Красный — есть занятый предмет. Зелёный — выбранный период.
+              Нажмите начало, затем окончание. Для одного дня нажмите его дважды.
+            </p>
+
+            <div style={ui.row}>
+              <label style={{ flex: '1 1 200px' }}>
+                Начало
+                <input
+                  type="date"
+                  style={ui.input}
+                  min={today}
+                  value={startDate}
+                  disabled={sending}
+                  onChange={event => {
+                    setStartDate(event.target.value);
+                    setMessage('');
+                  }}
+                />
+              </label>
+
+              <label style={{ flex: '1 1 200px' }}>
+                Окончание
+                <input
+                  type="date"
+                  style={ui.input}
+                  min={startDate || today}
+                  value={endDate}
+                  disabled={sending}
+                  onChange={event => {
+                    setEndDate(event.target.value);
+                    setMessage('');
+                  }}
+                />
+              </label>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Поле для комментария */}
-      <div style={{
-        marginBottom: '16px',
-        padding: '16px',
-        backgroundColor: '#0b0b0b',
-        borderRadius: '6px',
-        border: '1px solid #2a2a2a'
-      }}>
-        <label style={{ color: '#aaa', fontSize: '13px', display: 'block', marginBottom: '4px' }}>
-          📝 Комментарий к бронированию (необязательно)
-        </label>
-        <input
-          type="text"
-          placeholder="Например: верну в 14:00, забираю на выезд..."
+      <label>
+        Комментарий
+        <textarea
+          rows={3}
+          maxLength={2000}
+          style={{ ...ui.input, marginTop: 6 }}
           value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            backgroundColor: '#111',
-            border: '1px solid #333',
-            borderRadius: '4px',
-            color: '#e0e0e0',
-            fontSize: '14px',
-            outline: 'none'
-          }}
+          disabled={sending}
+          onChange={event => setComment(event.target.value)}
+          placeholder="Например: съёмка интервью, комплект для выезда"
         />
-      </div>
+      </label>
 
-      {/* Кнопка оформления */}
+      {problem && <p role="alert" style={ui.error}>{problem}</p>}
+      {message && <p role="alert" style={ui.error}>{message}</p>}
+
       <button
+        type="button"
+        disabled={!canSubmit}
         onClick={confirmBooking}
-        disabled={loading || !selectedStart || !selectedEnd}
         style={{
+          ...ui.button,
           width: '100%',
-          padding: '14px',
-          backgroundColor: loading || !selectedStart || !selectedEnd ? '#333' : '#4caf50',
-          border: 'none',
-          borderRadius: '6px',
-          color: loading || !selectedStart || !selectedEnd ? '#666' : '#0b0b0b',
-          fontSize: '16px',
-          fontWeight: '600',
-          cursor: loading || !selectedStart || !selectedEnd ? 'default' : 'pointer',
-          transition: 'background-color 0.2s'
+          marginTop: 16,
+          background: canSubmit ? '#2f7d44' : '#252525',
+          opacity: canSubmit ? 1 : 0.6,
         }}
       >
-        {loading ? '⏳ Бронирование...' : '✅ Забронировать всё'}
+        {sending ? 'Оформление…' : 'Забронировать всё'}
       </button>
+
+      <p style={ui.muted}>
+        Бронь резервирует даты. Выдача оформляется отдельно в «Моих бронированиях».
+      </p>
     </div>
   );
 }
-
-export default CartPage;

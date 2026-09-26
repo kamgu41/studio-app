@@ -1,240 +1,224 @@
-import React, { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import axios from 'axios';
-const API_URL = 'https://studio-app-backend-bhcs.onrender.com';
+import {
+  displayDate,
+  mutationError,
+  ui,
+  useBookingData,
+} from './bookingUi';
 
-function MyBookings({ currentUser, onClose, onReturnComplete }) {
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [returningIds, setReturningIds] = useState([]);
-  const [isReturningAll, setIsReturningAll] = useState(false);
+export default function MyBookings({
+  currentUser,
+  onClose,
+  onBookingsChanged,
+}) {
+  const user = typeof currentUser === 'string' ? currentUser.trim() : '';
+  const [busyId, setBusyId] = useState('');
+  const [message, setMessage] = useState('');
+  const actionLock = useRef(false);
 
-  // Загружаем бронирования текущего пользователя
-  const loadMyBookings = async () => {
+  const url = user
+    ? `/api/booking-v2/mine?user=${encodeURIComponent(user)}`
+    : null;
+
+  const { data, error, loading, reload } = useBookingData(url);
+
+  const today = data?.today || '';
+  const bookings = data?.bookings || [];
+
+  async function runAction(booking, action) {
+    if (actionLock.current) return;
+
+    const name = booking.equipment?.name || 'Оборудование';
+    const question = {
+      issue: `Выдать «${name}»?`,
+      return: `Подтверждаете фактический возврат «${name}»?`,
+      cancel: `Отменить бронь «${name}»?`,
+    }[action];
+
+    if (!window.confirm(question)) return;
+
+    actionLock.current = true;
+    setBusyId(booking.id);
+    setMessage('');
+
     try {
-      setLoading(true);
-      const response = await axios.get(`${API_URL}/api/my-bookings?user=${encodeURIComponent(currentUser)}`);
-      setBookings(response.data);
-      setError(null);
+      await axios.post(`/api/booking-v2/${booking.id}/action`, {
+        user,
+        action,
+      });
     } catch (err) {
-      console.error('❌ Ошибка загрузки:', err);
-      setError('Не удалось загрузить ваши бронирования');
+      setMessage(mutationError(err));
+      reload();
+      return;
     } finally {
-      setLoading(false);
+      actionLock.current = false;
+      setBusyId('');
     }
-  };
 
-  // Возврат ОДНОГО предмета
-  const returnItem = async (id) => {
-    if (!window.confirm('Вернуть это оборудование?')) return;
-    
-    setReturningIds(prev => [...prev, id]);
-    
+    setMessage({
+      issue: 'Выдача оформлена.',
+      return: 'Возврат оформлен. Другие будущие брони сохранены.',
+      cancel: 'Бронь отменена.',
+    }[action]);
+
+    reload();
+
+    // Обновляем главный список отдельно от результата самой операции.
     try {
-      await axios.patch(`${API_URL}/api/equipment/${id}/status`, { status: 'available' });
-      
-      // Обновляем локальный список
-      setBookings(prev => prev.filter(item => item.id !== id));
-      
-      // Уведомляем родителя
-      onReturnComplete(id);
-      
+      await onBookingsChanged?.();
     } catch (err) {
-      alert('Ошибка при возврате: ' + err.message);
-    } finally {
-      setReturningIds(prev => prev.filter(pid => pid !== id));
+      console.error('Операция сохранена, но главный список не обновился:', err);
+      setMessage('Операция сохранена. Обновите главный список оборудования.');
     }
-  };
-
-  // Возврат ВСЕГО (массовый)
-  // Возврат ВСЕГО (массовый)
-const returnAll = async () => {
-  if (bookings.length === 0) return;
-  if (!window.confirm(`Вернуть ВСЁ оборудование (${bookings.length} позиций)?`)) return;
-
-  setIsReturningAll(true);
-
-  try {
-    const ids = bookings.map(item => item.id);
-    await axios.post(`${API_URL}/api/equipment/bulk-return`, { ids });
-    
-    // Очищаем список
-    setBookings([]);
-    
-    // Уведомляем родителя (передаём null, чтобы обновить всё)
-    onReturnComplete(null);
-    
-  } catch (err) {
-    alert('Ошибка при возврате: ' + (err.response?.data?.error || err.message));
-  } finally {
-    setIsReturningAll(false);
   }
-};
 
-  useEffect(() => {
-    loadMyBookings();
-  }, []);
+  function renderBooking(booking) {
+    const item = booking.equipment;
+    const issued = booking.status === 'issued';
+    const future = today < booking.start_date;
+    const expired = booking.end_date < today;
 
-  if (loading) {
+    const canIssue =
+      !issued &&
+      !future &&
+      !expired &&
+      item?.status === 'available';
+
+    let explanation = '';
+
+    if (issued && expired) {
+      explanation = 'Просроченная выдача. Нужен фактический возврат.';
+    } else if (!issued && expired) {
+      explanation = 'Срок брони прошёл без выдачи. Её можно отменить.';
+    } else if (!issued && future) {
+      explanation = `Выдача доступна с ${displayDate(booking.start_date)}.`;
+    } else if (!issued && item?.status === 'repair') {
+      explanation = 'Предмет в ремонте. Выдача заблокирована.';
+    } else if (!issued && item?.status === 'rented') {
+      explanation = 'Предмет ещё не возвращён по другой выдаче.';
+    }
+
     return (
-      <div style={{ textAlign: 'center', padding: '40px', color: '#aaa' }}>
-        ⏳ Загрузка ваших бронирований...
-      </div>
+      <article key={booking.id} style={ui.panel}>
+        <div style={ui.row}>
+          <strong>{item?.name || 'Оборудование недоступно'}</strong>
+          <span style={{ color: issued ? '#f6c76d' : '#8bd89f' }}>
+            {issued ? 'Выдано' : 'Забронировано'}
+          </span>
+        </div>
+
+        <p>
+          {displayDate(booking.start_date)} — {displayDate(booking.end_date)}
+        </p>
+
+        {booking.comment && (
+          <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            {booking.comment}
+          </p>
+        )}
+
+        {explanation && <p style={ui.muted}>{explanation}</p>}
+
+        <div style={ui.row}>
+          {issued ? (
+            <button
+              type="button"
+              style={ui.button}
+              disabled={Boolean(busyId)}
+              onClick={() => runAction(booking, 'return')}
+            >
+              {busyId === booking.id ? 'Выполнение…' : 'Оформить возврат'}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                style={{
+                  ...ui.button,
+                  opacity: canIssue ? 1 : 0.45,
+                }}
+                disabled={Boolean(busyId) || !canIssue}
+                onClick={() => runAction(booking, 'issue')}
+              >
+                {busyId === booking.id ? 'Выполнение…' : 'Выдать'}
+              </button>
+
+              <button
+                type="button"
+                style={ui.button}
+                disabled={Boolean(busyId)}
+                onClick={() => runAction(booking, 'cancel')}
+              >
+                Отменить бронь
+              </button>
+            </>
+          )}
+        </div>
+      </article>
     );
   }
 
-  if (error) {
-    return (
-      <div style={{ color: '#f44336', textAlign: 'center', padding: '40px' }}>
-        {error}
-      </div>
-    );
-  }
+  const issuedBookings = bookings.filter(item => item.status === 'issued');
+  const reservedBookings = bookings.filter(item => item.status === 'reserved');
 
   return (
-    <div style={{
-      maxWidth: '900px',
-      margin: '0 auto',
-      padding: '20px'
-    }}>
-      {/* Шапка */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '24px',
-        borderBottom: '1px solid #2a2a2a',
-        paddingBottom: '16px',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
-        <div>
-          <h2 style={{ margin: 0, color: '#fff' }}>
-            📋 Мои бронирования
-          </h2>
-          <p style={{ margin: '4px 0 0', color: '#555', fontSize: '13px' }}>
-            {currentUser ? `👤 ${currentUser}` : ''}
-            {bookings.length > 0 && (
-              <span style={{ marginLeft: '12px', color: '#888' }}>
-                ({bookings.length} позиций)
-              </span>
-            )}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {bookings.length > 0 && (
+    <div style={ui.page}>
+      <div style={ui.row}>
+        <h2>Мои бронирования</h2>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            style={ui.button}
+            disabled={!user || loading || Boolean(busyId)}
+            onClick={reload}
+          >
+            Обновить
+          </button>
+
+          {onClose && (
             <button
-              onClick={returnAll}
-              disabled={isReturningAll}
-              style={{
-                padding: '6px 16px',
-                backgroundColor: isReturningAll ? '#555' : '#b91c1c',
-                border: 'none',
-                borderRadius: '4px',
-                color: '#fff',
-                fontSize: '13px',
-                cursor: isReturningAll ? 'default' : 'pointer',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => {
-                if (!isReturningAll) e.target.style.backgroundColor = '#d32f2f';
-              }}
-              onMouseLeave={(e) => {
-                if (!isReturningAll) e.target.style.backgroundColor = '#b91c1c';
-              }}
+              type="button"
+              style={ui.button}
+              disabled={Boolean(busyId)}
+              onClick={onClose}
             >
-              {isReturningAll ? '⏳ ...' : '🔄 Вернуть всё'}
+              Закрыть
             </button>
           )}
-          <button
-            onClick={onClose}
-            style={{
-              padding: '6px 16px',
-              backgroundColor: '#333',
-              border: 'none',
-              borderRadius: '4px',
-              color: '#aaa',
-              fontSize: '13px',
-              cursor: 'pointer'
-            }}
-          >
-            ✕ Закрыть
-          </button>
         </div>
       </div>
 
-      {/* Список */}
-      {bookings.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '60px 20px',
-          color: '#555',
-          fontSize: '16px'
-        }}>
-          🎉 У вас пока нет активных бронирований
+      <p style={ui.muted}>
+        Пользователь: {user || 'не выбран'}
+        {today ? ` · Камчатка, ${displayDate(today)}` : ''}
+      </p>
+
+      {!user && <p style={ui.error}>Сначала выберите пользователя.</p>}
+      {loading && <p>Загрузка бронирований…</p>}
+      {error && <p role="alert" style={ui.error}>{error}</p>}
+      {message && <p role="status">{message}</p>}
+
+      {data && bookings.length === 0 && (
+        <div style={ui.panel}>
+          Незавершённых бронирований и выдач нет.
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {bookings.map((item) => {
-            const isReturning = returningIds.includes(item.id);
-            return (
-              <div key={item.id} style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '12px 16px',
-                backgroundColor: '#111',
-                borderRadius: '6px',
-                borderLeft: '3px solid #4caf50',
-                flexWrap: 'wrap',
-                gap: '8px',
-                opacity: isReturning ? 0.5 : 1
-              }}>
-                <div>
-                  <span style={{ color: '#ddd', fontSize: '14px' }}>
-                    {item.name}
-                  </span>
-                  {item.rented_until && (
-                    <span style={{ color: '#666', fontSize: '12px', marginLeft: '12px' }}>
-                      ⏳ до {new Date(item.rented_until).toLocaleDateString()}
-                    </span>
-                  )}
-                  {item.comment && (
-                    <span style={{ color: '#b45309', fontSize: '12px', marginLeft: '12px', fontStyle: 'italic' }}>
-                      💬 {item.comment}
-                    </span>
-                  )}
-                </div>
-                
-                <button
-                  onClick={() => returnItem(item.id)}
-                  disabled={isReturning}
-                  style={{
-                    padding: '4px 16px',
-                    backgroundColor: isReturning ? '#555' : '#b91c1c',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: '#fff',
-                    fontSize: '12px',
-                    cursor: isReturning ? 'default' : 'pointer',
-                    transition: 'background-color 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isReturning) e.target.style.backgroundColor = '#d32f2f';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isReturning) e.target.style.backgroundColor = '#b91c1c';
-                  }}
-                >
-                  {isReturning ? '⏳ ...' : '🔄 Вернуть'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+      )}
+
+      {issuedBookings.length > 0 && (
+        <section>
+          <h3>На руках — {issuedBookings.length}</h3>
+          {issuedBookings.map(renderBooking)}
+        </section>
+      )}
+
+      {reservedBookings.length > 0 && (
+        <section>
+          <h3>Забронировано — {reservedBookings.length}</h3>
+          {reservedBookings.map(renderBooking)}
+        </section>
       )}
     </div>
   );
 }
-
-export default MyBookings;
