@@ -216,6 +216,71 @@ module.exports = function createBookingRoutes(supabase) {
 
 // GET /api/booking-v2/mine
 // Владельца определяет сервер по токену.
+  // Полный состав групп, в которых ещё есть бронь или выдача.
+  // Владельца всегда берём из проверенного аккаунта.
+  router.get('/mine-groups', handle(async (req, res) => {
+    const columns = `
+      id,
+      batch_id,
+      equipment_id,
+      start_date,
+      end_date,
+      status,
+      comment,
+      created_at,
+      equipment:equipment_id (
+        id,
+        name,
+        status
+      )
+    `;
+
+    const active = await readCompleteList(
+      supabase
+        .from('bookings')
+        .select(columns, { count: 'exact' })
+        .eq('user_id', req.account.id)
+        .in('status', ['reserved', 'issued'])
+        .order('start_date')
+        .order('id')
+    );
+
+    const batchIds = [
+      ...new Set(active.map(booking => booking.batch_id).filter(Boolean)),
+    ];
+
+    // Старые записи без batch_id показываем по отдельности.
+    const bookings = active.filter(booking => !booking.batch_id);
+
+    // Небольшие порции, чтобы не создавать слишком длинный URL к базе.
+    for (let offset = 0; offset < batchIds.length; offset += 50) {
+      const portion = batchIds.slice(offset, offset + 50);
+
+      const rows = await readCompleteList(
+        supabase
+          .from('bookings')
+          .select(columns, { count: 'exact' })
+          .eq('user_id', req.account.id)
+          .in('batch_id', portion)
+          .order('start_date')
+          .order('id')
+      );
+
+      bookings.push(...rows);
+    }
+
+    bookings.sort((a, b) =>
+      a.start_date.localeCompare(b.start_date) ||
+      a.id.localeCompare(b.id)
+    );
+
+    res.json({
+      today: getToday(),
+      timeZone: TIME_ZONE,
+      bookings,
+    });
+  }));
+
 
   router.get('/mine', handle(async (req, res) => {
 
@@ -295,6 +360,60 @@ module.exports = function createBookingRoutes(supabase) {
     if (error) throw error;
 
     res.status(201).json({
+      success: true,
+      ...data,
+    });
+  }));
+  // Массовая выдача или возврат внутри одной группы.
+  //
+  // POST /api/booking-v2/bulk-action
+  // { bookingIds: [...], action: "issue" | "return" }
+  router.post('/bulk-action', handle(async (req, res) => {
+    const body = req.body || {};
+    const values = body.bookingIds;
+
+    if (
+      !Array.isArray(values) ||
+      values.length < 1 ||
+      values.length > 150 ||
+      values.some(
+        id => typeof id !== 'string' || !UUID_PATTERN.test(id)
+      )
+    ) {
+      throw httpError(
+        400,
+        'Передайте от 1 до 150 корректных ID бронирований'
+      );
+    }
+
+    const bookingIds = values.map(id => id.toLowerCase());
+
+    if (new Set(bookingIds).size !== bookingIds.length) {
+      throw httpError(
+        400,
+        'В списке повторяются бронирования'
+      );
+    }
+
+    if (!['issue', 'return'].includes(body.action)) {
+      throw httpError(
+        400,
+        'Разрешены только массовая выдача и возврат'
+      );
+    }
+
+    const { data, error } = await supabase.rpc(
+      'studio_booking_bulk_action',
+      {
+        p_booking_ids: bookingIds,
+        p_user_id: req.account.id,
+        p_action: body.action,
+      }
+    );
+
+    if (error) throw error;
+
+    res.json({
       success: true,
       ...data,
     });

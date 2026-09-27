@@ -348,89 +348,60 @@ const finishRepair = async (id) => {
 
 
         {/* ===== ВКЛАДКИ (АДАПТИВНЫЕ) ===== */}
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          marginBottom: '16px',
-          borderBottom: '1px solid #2a2a2a',
-          paddingBottom: '4px',
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none'
-        }}>
-          <button 
-            onClick={() => setActiveTab('all')}
-            style={{
-              padding: isMobile ? '6px 12px' : '8px 20px',
-              backgroundColor: activeTab === 'all' ? '#2a2a2a' : 'transparent',
-              border: 'none',
-              borderRadius: '4px 4px 0 0',
-              color: activeTab === 'all' ? '#fff' : '#666',
-              fontSize: isMobile ? '11px' : '13px',
-              fontWeight: activeTab === 'all' ? '500' : '400',
-              cursor: 'pointer',
-              borderBottom: activeTab === 'all' ? '2px solid #4caf50' : '2px solid transparent',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            📊 Все
-          </button>
-          <button 
-            onClick={() => setActiveTab('available')}
-            style={{
-              padding: isMobile ? '6px 12px' : '8px 20px',
-              backgroundColor: activeTab === 'available' ? '#1a2e1a' : 'transparent',
-              border: 'none',
-              borderRadius: '4px 4px 0 0',
-              color: activeTab === 'available' ? '#4caf50' : '#666',
-              fontSize: isMobile ? '11px' : '13px',
-              fontWeight: activeTab === 'available' ? '500' : '400',
-              cursor: 'pointer',
-              borderBottom: activeTab === 'available' ? '2px solid #4caf50' : '2px solid transparent',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            ✅ Доступно
-          </button>
-          <button 
-            onClick={() => setActiveTab('repair')}
-            style={{
-              padding: isMobile ? '6px 12px' : '8px 20px',
-              backgroundColor: activeTab === 'repair' ? '#2a1a0a' : 'transparent',
-              border: 'none',
-              borderRadius: '4px 4px 0 0',
-              color: activeTab === 'repair' ? '#b45309' : '#666',
-              fontSize: isMobile ? '11px' : '13px',
-              fontWeight: activeTab === 'repair' ? '500' : '400',
-              cursor: 'pointer',
-              borderBottom: activeTab === 'repair' ? '2px solid #b45309' : '2px solid transparent',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            🔧 В ремонте
-          </button>
-          <button 
-            onClick={() => setActiveTab('rented')}
-            style={{
-              padding: isMobile ? '6px 12px' : '8px 20px',
-              backgroundColor: activeTab === 'rented' ? '#2a0a0a' : 'transparent',
-              border: 'none',
-              borderRadius: '4px 4px 0 0',
-              color: activeTab === 'rented' ? '#b91c1c' : '#666',
-              fontSize: isMobile ? '11px' : '13px',
-              fontWeight: activeTab === 'rented' ? '500' : '400',
-              cursor: 'pointer',
-              borderBottom: activeTab === 'rented' ? '2px solid #b91c1c' : '2px solid transparent',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            🔒 Занято
-          </button>
+                {/* ===== ФИЛЬТРЫ КАТАЛОГА ===== */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            marginBottom: 16,
+            paddingBottom: 8,
+            borderBottom: '1px solid #2a2a2a',
+          }}
+        >
+          {[
+            {
+              id: 'all',
+              label: 'Всё',
+              count: totalItems,
+            },
+            {
+              id: 'repair',
+              label: 'В ремонте',
+              count: mainCategories.reduce(
+                (total, main) =>
+                  total + (main.subCategories || []).reduce(
+                    (subtotal, sub) =>
+                      subtotal + (sub.items || []).filter(
+                        item => item.status === 'repair'
+                      ).length,
+                    0
+                  ),
+                0
+              ),
+            },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              aria-pressed={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: '10px 16px',
+                borderRadius: 6,
+                border: activeTab === tab.id
+                  ? '1px solid #62876a'
+                  : '1px solid #333',
+                background: activeTab === tab.id ? '#223126' : '#111',
+                color: activeTab === tab.id ? '#fff' : '#aaa',
+                cursor: 'pointer',
+              }}
+            >
+              {tab.label} · {tab.count}
+            </button>
+          ))}
         </div>
+
 
         {/* ===== ДВУХУРОВНЕВЫЙ СПИСОК С ФИЛЬТРАЦИЕЙ ===== */}
         {(() => {
