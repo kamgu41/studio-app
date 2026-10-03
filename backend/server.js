@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const { createClient } = require('@supabase/supabase-js');
 const createBookingRoutes = require('./bookingRoutes');
 const createAuthMiddleware = require('./authMiddleware');
+const buildCatalogHierarchy = require('./catalogHierarchy');
 
 
 
@@ -168,19 +169,12 @@ app.get('/api/full-hierarchy', async (req, res) => {
       return res.status(500).json({ error: itemsError.message });
     }
 
-    const hierarchy = mainCategories.map(main => {
-      const subs = allSubs.filter(sub => sub.main_category_id === main.id);
-      
-      const subWithItems = subs.map(sub => ({
-        ...sub,
-        items: allItems.filter(item => item.sub_category_id === sub.id)
-      }));
+        const hierarchy = buildCatalogHierarchy(
+      mainCategories,
+      allSubs,
+      allItems
+    );
 
-      return {
-        ...main,
-        subCategories: subWithItems
-      };
-    });
 
     console.log(`🟢 Иерархия построена, ${hierarchy.length} категорий`);
     res.json(hierarchy);

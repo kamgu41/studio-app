@@ -4,6 +4,8 @@ import CartPage from './CartPage';
 import MyBookings from './MyBookings';
 import EditorPanel from './EditorPanel';
 import { displayDate, mutationError } from './bookingUi';
+import CatalogTree from './CatalogTree';
+
 
 
 const API_URL = '';
@@ -20,7 +22,6 @@ function EquipmentList({ currentUser }) {
   const [showEditor, setShowEditor] = useState(false);
 
   const [mainCategories, setMainCategories] = useState([]);
-  const [openCategories, setOpenCategories] = useState({});
 
   const [showRepairModal, setShowRepairModal] = useState(false);
   const [repairItemId, setRepairItemId] = useState(null);
@@ -52,13 +53,6 @@ function EquipmentList({ currentUser }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const toggleCategory = (id) => {
-    setOpenCategories(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
   };
 
   // ===== РЕМОНТ ЧЕРЕЗ API V2 =====
@@ -165,6 +159,200 @@ const finishRepair = async (id) => {
   }, 0);
 
   const isMobile = window.innerWidth < 600;
+  const renderEquipmentItems = (items) => items.map((item) => {
+                                const isInCart = cart.find(cartItem => cartItem.id === item.id);
+                                const isRented = item.status === 'rented';
+                                const isRepair = item.status === 'repair';
+                                const isAvailable = item.status === 'available';
+
+                                return (
+ <div
+  key={item.id}
+  style={{
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: isMobile ? '8px 8px' : '4px 12px',
+    borderRadius: '4px',
+    backgroundColor: isInCart ? '#1a3a1a' : isRented ? '#2a1a1a' : 'transparent',
+    borderLeft: `3px solid ${
+      isInCart ? '#4caf50' :
+      isRented ? '#b91c1c' :
+      isAvailable ? '#4caf50' :
+      '#b45309'
+    }`,
+    flexWrap: 'nowrap',
+    gap: isMobile ? '6px' : '8px',
+    alignItems: 'center',
+    minHeight: isMobile ? '44px' : '32px',
+    cursor: 'default'
+  }}
+>
+  {/* ===== НАЗВАНИЕ (ВЫРАВНИВАНИЕ ПО ЛЕВОМУ КРАЮ) ===== */}
+  <span style={{
+    fontSize: isMobile ? '14px' : '14px',
+    fontWeight: isInCart || isRented ? '500' : '400',
+    color: isInCart ? '#4caf50' : isRented ? '#f44336' : '#ddd',
+    flex: '1 1 auto',
+    minWidth: '60px',
+    wordBreak: 'break-word',
+    overflowWrap: 'break-word',
+    hyphens: 'auto',
+    lineHeight: '1.4',
+    paddingRight: '8px',
+    textAlign: 'left'
+  }}>
+    {item.name}
+  </span>
+
+  {/* ===== ПРАВАЯ ЧАСТЬ (СТАТУСЫ + КНОПКИ) ===== */}
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: isMobile ? '4px' : '4px',
+    flexWrap: 'wrap',
+    flexShrink: 0,
+    justifyContent: 'flex-end'
+  }}>
+    {isRented && item.rented_by && (
+      <span style={{ 
+        color: '#888', 
+        fontSize: isMobile ? '10px' : '11px',
+        whiteSpace: 'nowrap'
+      }}>
+        👤 {item.rented_by}
+        {item.rented_until && (
+          <span style={{ color: '#666', fontSize: isMobile ? '8px' : '10px', marginLeft: '2px' }}>
+            до {displayDate(item.rented_until)}
+          </span>
+        )}
+        {item.booking_comment && (
+          <span style={{ 
+            color: '#b45309', 
+            fontSize: isMobile ? '8px' : '10px', 
+            marginLeft: '2px',
+            fontStyle: 'italic'
+          }}>
+            💬 {item.booking_comment}
+          </span>
+        )}
+      </span>
+    )}
+
+    {isRepair && item.repair_comment && (
+      <button
+        onClick={() => openRepairDetails(item)}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#b45309',
+          fontSize: isMobile ? '14px' : '14px',
+          cursor: 'pointer',
+          padding: isMobile ? '4px 6px' : '2px 4px',
+          borderRadius: '4px'
+        }}
+        title="Нажмите, чтобы увидеть комментарий"
+      >
+        💬
+      </button>
+    )}
+
+    {!isRented && (
+      <div style={{ display: 'flex', gap: isMobile ? '4px' : '2px', flexShrink: 0 }}>
+        <button
+          onClick={() => finishRepair(item.id)}
+          style={{
+            padding: isMobile ? '4px 10px' : '2px 8px',
+            fontSize: isMobile ? '11px' : '11px',
+            fontWeight: '400',
+            letterSpacing: '0.3px',
+            borderRadius: '2px',
+            border: 'none',
+            backgroundColor: isAvailable ? '#4caf50' : 'transparent',
+            color: isAvailable ? '#0b0b0b' : '#555',
+            cursor: isAvailable ? 'default' : 'pointer',
+            transition: 'color 0.2s, background-color 0.2s',
+            whiteSpace: 'nowrap',
+            minHeight: isMobile ? '32px' : 'auto'
+          }}
+          disabled={isAvailable || repairBusy}
+
+        >
+          {isRepair ? 'ИЗ РЕМОНТА' : 'НА СКЛАДЕ'}
+
+        </button>
+        <button
+          onClick={() => openRepairModal(item.id)}
+          style={{
+            padding: isMobile ? '4px 10px' : '2px 8px',
+            fontSize: isMobile ? '11px' : '11px',
+            fontWeight: '400',
+            letterSpacing: '0.3px',
+            borderRadius: '2px',
+            border: 'none',
+            backgroundColor: isRepair ? '#b45309' : 'transparent',
+            color: isRepair ? '#0b0b0b' : '#555',
+            cursor: isRepair ? 'default' : 'pointer',
+            transition: 'color 0.2s, background-color 0.2s',
+            whiteSpace: 'nowrap',
+            minHeight: isMobile ? '32px' : 'auto'
+          }}
+          disabled={isRepair || repairBusy}
+        >
+          РЕМОНТ
+        </button>
+      </div>
+    )}
+
+    {(isAvailable || isRented) && (
+  <button
+    title={
+      isInCart
+        ? 'Убрать из корзины'
+        : isRented
+          ? 'Выбрать даты после текущей выдачи'
+          : 'Выбрать даты бронирования'
+    }
+    onClick={() => addToCart(item)}
+
+        style={{
+          padding: isMobile ? '4px 10px' : '2px 8px',
+          fontSize: isMobile ? '11px' : '11px',
+          borderRadius: '2px',
+          border: '1px solid #555',
+          backgroundColor: isInCart ? '#4caf50' : 'transparent',
+          color: isInCart ? '#0b0b0b' : '#888',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          flexShrink: 0,
+          minHeight: isMobile ? '32px' : 'auto'
+        }}
+      >
+        {isInCart ? '✔' : '➕'}
+      </button>
+    )}
+
+    {isRepair && (
+      <span style={{
+        padding: isMobile ? '4px 8px' : '2px 6px',
+        fontSize: isMobile ? '11px' : '11px',
+        borderRadius: '2px',
+        border: '1px solid #444',
+        color: '#444',
+        opacity: 0.3,
+        cursor: 'default',
+        flexShrink: 0,
+        minHeight: isMobile ? '32px' : 'auto',
+        display: 'flex',
+        alignItems: 'center'
+      }}>
+        ➕
+      </span>
+    )}
+  </div>
+</div>
+                                );
+                              });
+
 
   if (loading && !hasLoaded) {
     return <div style={{ textAlign: 'center', padding: '40px', color: '#aaa' }}>⏳ Загрузка...</div>;
@@ -401,328 +589,15 @@ const finishRepair = async (id) => {
             </button>
           ))}
         </div>
+{/* ===== ВЛОЖЕННЫЙ КАТАЛОГ ===== */}
+<CatalogTree
+  mainCategories={mainCategories}
+  activeTab={activeTab}
+  renderItems={renderEquipmentItems}
+/>
 
 
-        {/* ===== ДВУХУРОВНЕВЫЙ СПИСОК С ФИЛЬТРАЦИЕЙ ===== */}
-        {(() => {
-          const filteredMainCategories = mainCategories.map(main => ({
-            ...main,
-            subCategories: main.subCategories?.map(sub => ({
-              ...sub,
-              items: sub.items?.filter(item => {
-                if (activeTab === 'all') return true;
-                return item.status === activeTab;
-              })
-            })).filter(sub => sub.items && sub.items.length > 0)
-          })).filter(main => main.subCategories && main.subCategories.length > 0);
-
-          if (filteredMainCategories.length === 0) {
-            return (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#555', fontSize: '16px' }}>
-                {activeTab === 'available' && '✅ Нет доступного оборудования'}
-                {activeTab === 'repair' && '🔧 Нет оборудования в ремонте'}
-                {activeTab === 'rented' && '🔒 Нет занятого оборудования'}
-                {activeTab === 'all' && '🏷️ Нет категорий'}
-              </div>
-            );
-          }
-
-          return filteredMainCategories.map((mainCat) => {
-            const isMainOpen = openCategories[mainCat.id] || false;
-            const subs = mainCat.subCategories || [];
-
-            return (
-              <section key={mainCat.id} style={{ marginBottom: '8px' }}>
-                <div
-                  onClick={() => toggleCategory(mainCat.id)}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: isMobile ? '8px 12px' : '12px 16px',
-                    backgroundColor: '#1a1a1a',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s',
-                    border: '1px solid #2a2a2a',
-                    userSelect: 'none'
-                  }}
-                >
-                  <span style={{
-                    fontSize: isMobile ? '14px' : '16px',
-                    fontWeight: '600',
-                    color: '#e0e0e0',
-                    letterSpacing: '0.5px'
-                  }}>
-                    {mainCat.name}
-                  </span>
-                  <span style={{
-                    color: '#666',
-                    fontSize: isMobile ? '16px' : '18px',
-                    transition: 'transform 0.3s',
-                    transform: isMainOpen ? 'rotate(180deg)' : 'rotate(0deg)'
-                  }}>
-                    ▼
-                  </span>
-                </div>
-
-                {isMainOpen && (
-                  <div style={{
-                    paddingLeft: isMobile ? '8px' : '16px',
-                    marginTop: '4px',
-                    borderLeft: '2px solid #2a2a2a'
-                  }}>
-                    {subs.map((sub) => {
-                      const isSubOpen = openCategories[sub.id] || false;
-                      const items = sub.items || [];
-
-                      return (
-                        <div key={sub.id} style={{ marginBottom: '4px' }}>
-                          <div
-                            onClick={() => toggleCategory(sub.id)}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              padding: isMobile ? '4px 8px' : '6px 12px',
-                              backgroundColor: '#111',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              transition: 'background-color 0.2s',
-                              border: '1px solid #2a2a2a',
-                              userSelect: 'none'
-                            }}
-                          >
-                            <span style={{
-                              fontSize: isMobile ? '12px' : '14px',
-                              fontWeight: '500',
-                              color: '#aaa'
-                            }}>
-                              {sub.name} <span style={{ color: '#555', fontWeight: '300' }}>({items.length})</span>
-                            </span>
-                            <span style={{
-                              color: '#555',
-                              fontSize: isMobile ? '12px' : '14px',
-                              transition: 'transform 0.3s',
-                              transform: isSubOpen ? 'rotate(180deg)' : 'rotate(0deg)'
-                            }}>
-                              ▼
-                            </span>
-                          </div>
-
-                          {isSubOpen && (
-                            <div style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '2px',
-                              marginTop: '2px',
-                              paddingLeft: isMobile ? '4px' : '8px',
-                              borderLeft: '2px solid #1a1a1a'
-                            }}>
-                              {items.map((item) => {
-                                const isInCart = cart.find(cartItem => cartItem.id === item.id);
-                                const isRented = item.status === 'rented';
-                                const isRepair = item.status === 'repair';
-                                const isAvailable = item.status === 'available';
-
-                                return (
- <div
-  key={item.id}
-  style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: isMobile ? '8px 8px' : '4px 12px',
-    borderRadius: '4px',
-    backgroundColor: isInCart ? '#1a3a1a' : isRented ? '#2a1a1a' : 'transparent',
-    borderLeft: `3px solid ${
-      isInCart ? '#4caf50' :
-      isRented ? '#b91c1c' :
-      isAvailable ? '#4caf50' :
-      '#b45309'
-    }`,
-    flexWrap: 'nowrap',
-    gap: isMobile ? '6px' : '8px',
-    alignItems: 'center',
-    minHeight: isMobile ? '44px' : '32px',
-    cursor: 'default'
-  }}
->
-  {/* ===== НАЗВАНИЕ (ВЫРАВНИВАНИЕ ПО ЛЕВОМУ КРАЮ) ===== */}
-  <span style={{
-    fontSize: isMobile ? '14px' : '14px',
-    fontWeight: isInCart || isRented ? '500' : '400',
-    color: isInCart ? '#4caf50' : isRented ? '#f44336' : '#ddd',
-    flex: '1 1 auto',
-    minWidth: '60px',
-    wordBreak: 'break-word',
-    overflowWrap: 'break-word',
-    hyphens: 'auto',
-    lineHeight: '1.4',
-    paddingRight: '8px',
-    textAlign: 'left'
-  }}>
-    {item.name}
-  </span>
-
-  {/* ===== ПРАВАЯ ЧАСТЬ (СТАТУСЫ + КНОПКИ) ===== */}
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: isMobile ? '4px' : '4px',
-    flexWrap: 'wrap',
-    flexShrink: 0,
-    justifyContent: 'flex-end'
-  }}>
-    {isRented && item.rented_by && (
-      <span style={{ 
-        color: '#888', 
-        fontSize: isMobile ? '10px' : '11px',
-        whiteSpace: 'nowrap'
-      }}>
-        👤 {item.rented_by}
-        {item.rented_until && (
-          <span style={{ color: '#666', fontSize: isMobile ? '8px' : '10px', marginLeft: '2px' }}>
-            до {displayDate(item.rented_until)}
-          </span>
-        )}
-        {item.booking_comment && (
-          <span style={{ 
-            color: '#b45309', 
-            fontSize: isMobile ? '8px' : '10px', 
-            marginLeft: '2px',
-            fontStyle: 'italic'
-          }}>
-            💬 {item.booking_comment}
-          </span>
-        )}
-      </span>
-    )}
-
-    {isRepair && item.repair_comment && (
-      <button
-        onClick={() => openRepairDetails(item)}
-        style={{
-          background: 'none',
-          border: 'none',
-          color: '#b45309',
-          fontSize: isMobile ? '14px' : '14px',
-          cursor: 'pointer',
-          padding: isMobile ? '4px 6px' : '2px 4px',
-          borderRadius: '4px'
-        }}
-        title="Нажмите, чтобы увидеть комментарий"
-      >
-        💬
-      </button>
-    )}
-
-    {!isRented && (
-      <div style={{ display: 'flex', gap: isMobile ? '4px' : '2px', flexShrink: 0 }}>
-        <button
-          onClick={() => finishRepair(item.id)}
-          style={{
-            padding: isMobile ? '4px 10px' : '2px 8px',
-            fontSize: isMobile ? '11px' : '11px',
-            fontWeight: '400',
-            letterSpacing: '0.3px',
-            borderRadius: '2px',
-            border: 'none',
-            backgroundColor: isAvailable ? '#4caf50' : 'transparent',
-            color: isAvailable ? '#0b0b0b' : '#555',
-            cursor: isAvailable ? 'default' : 'pointer',
-            transition: 'color 0.2s, background-color 0.2s',
-            whiteSpace: 'nowrap',
-            minHeight: isMobile ? '32px' : 'auto'
-          }}
-          disabled={isAvailable || repairBusy}
-
-        >
-          {isRepair ? 'ИЗ РЕМОНТА' : 'НА СКЛАДЕ'}
-
-        </button>
-        <button
-          onClick={() => openRepairModal(item.id)}
-          style={{
-            padding: isMobile ? '4px 10px' : '2px 8px',
-            fontSize: isMobile ? '11px' : '11px',
-            fontWeight: '400',
-            letterSpacing: '0.3px',
-            borderRadius: '2px',
-            border: 'none',
-            backgroundColor: isRepair ? '#b45309' : 'transparent',
-            color: isRepair ? '#0b0b0b' : '#555',
-            cursor: isRepair ? 'default' : 'pointer',
-            transition: 'color 0.2s, background-color 0.2s',
-            whiteSpace: 'nowrap',
-            minHeight: isMobile ? '32px' : 'auto'
-          }}
-          disabled={isRepair || repairBusy}
-        >
-          РЕМОНТ
-        </button>
-      </div>
-    )}
-
-    {(isAvailable || isRented) && (
-  <button
-    title={
-      isInCart
-        ? 'Убрать из корзины'
-        : isRented
-          ? 'Выбрать даты после текущей выдачи'
-          : 'Выбрать даты бронирования'
-    }
-    onClick={() => addToCart(item)}
-
-        style={{
-          padding: isMobile ? '4px 10px' : '2px 8px',
-          fontSize: isMobile ? '11px' : '11px',
-          borderRadius: '2px',
-          border: '1px solid #555',
-          backgroundColor: isInCart ? '#4caf50' : 'transparent',
-          color: isInCart ? '#0b0b0b' : '#888',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          flexShrink: 0,
-          minHeight: isMobile ? '32px' : 'auto'
-        }}
-      >
-        {isInCart ? '✔' : '➕'}
-      </button>
-    )}
-
-    {isRepair && (
-      <span style={{
-        padding: isMobile ? '4px 8px' : '2px 6px',
-        fontSize: isMobile ? '11px' : '11px',
-        borderRadius: '2px',
-        border: '1px solid #444',
-        color: '#444',
-        opacity: 0.3,
-        cursor: 'default',
-        flexShrink: 0,
-        minHeight: isMobile ? '32px' : 'auto',
-        display: 'flex',
-        alignItems: 'center'
-      }}>
-        ➕
-      </span>
-    )}
-  </div>
-</div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            );
-          });
-        })()}
+        
       </div>
 
       {/* ===== МОДАЛЬНЫЕ ОКНА ===== */}
