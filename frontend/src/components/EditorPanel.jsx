@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from '../api';
+import { getEditorCategoryRows } from "./editorCategoryRows.js";
+
 const API_URL = '';
 
 function EditorPanel({ onClose, onUpdate, initialData }) {
@@ -19,6 +21,10 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
   const [showAddItem, setShowAddItem] = useState(null);
   const [newItemName, setNewItemName] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
+  const [newSubParentId, setNewSubParentId] = useState('');
+  const [addingSub, setAddingSub] = useState(false);
+  const addingSubRef = useRef(false);
+  const [closing, setClosing] = useState(false);
 
   // ===== ИНИЦИАЛИЗАЦИЯ =====
   const initialDataRef = useRef(initialData);
@@ -89,39 +95,90 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
     return null;
   };
 
-  // ===== ПОДКАТЕГОРИИ =====
   const handleAddSubCategory = async (mainId) => {
-    if (!newSubName.trim()) {
-      setMessage('Введите название подкатегории');
-      return;
+  if (addingSubRef.current) return;
+
+  const name = newSubName.trim();
+
+  if (!name) {
+    setMessage('Введите название подраздела');
+    return;
+  }
+
+  const main = mainCategories.find(category => category.id === mainId);
+  const parentId = newSubParentId || null;
+
+  if (!main) {
+    setMessage('❌ Основная категория не найдена');
+    return;
+  }
+
+  if (
+    parentId &&
+    !(main.subCategories || []).some(sub => sub.id === parentId)
+  ) {
+    setMessage('❌ Выберите родителя в этой основной категории');
+    return;
+  }
+
+  addingSubRef.current = true;
+  setAddingSub(true);
+
+  try {
+    const response = await axios.post(`${API_URL}/api/sub-category`, {
+      name,
+      main_category_id: mainId,
+      parent_id: parentId,
+    });
+
+    const newSub = response.data?.data;
+
+    if (!newSub?.id) {
+      throw new Error(
+        'Сервер не вернул созданный раздел. Обновите страницу перед повторной попыткой.'
+      );
     }
 
-    try {
-      const response = await axios.post(`${API_URL}/api/sub-category`, {
-        name: newSubName.trim(),
-        main_category_id: mainId
-      });
-      
-      const newSub = response.data.data;
-      
-      setMainCategories(prev => prev.map(main => {
-        if (main.id === mainId) {
-          return {
-            ...main,
-            subCategories: [...(main.subCategories || []), { ...newSub, items: [] }]
-          };
-        }
-        return main;
-      }));
-      
-      setNewSubName('');
-      setShowAddSub(null);
-      setMessage(`✅ Подкатегория добавлена`);
-      markChanged();
-    } catch (err) {
-      setMessage('❌ Ошибка: ' + (err.response?.data?.error || err.message));
+    setMainCategories(prev => prev.map(category => (
+      category.id === mainId
+        ? {
+            ...category,
+            subCategories: [
+              ...(category.subCategories || []),
+              { ...newSub, items: [] },
+            ],
+          }
+        : category
+    )));
+
+    setOpenCategories(prev => ({
+      ...prev,
+      [mainId]: true,
+      ...(parentId ? { [parentId]: true } : {}),
+      [newSub.id]: true,
+    }));
+
+    markChanged();
+    setNewSubName('');
+    setNewSubParentId('');
+    setShowAddSub(null);
+
+    if ((newSub.parent_id || null) !== parentId) {
+      setMessage(
+        '❌ Сервер создал раздел не у выбранного родителя. ' +
+        'Не повторяйте создание: проверьте обновление server.js.'
+      );
+    } else {
+      setMessage('✅ Подраздел добавлен');
     }
-  };
+  } catch (err) {
+    setMessage('❌ Ошибка: ' + (err.response?.data?.error || err.message));
+  } finally {
+    addingSubRef.current = false;
+    setAddingSub(false);
+  }
+};
+
 
   const handleRenameSub = async (id) => {
     if (!editingSubValue.trim()) {
@@ -152,6 +209,14 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
 
   const handleDeleteSub = async (id, name) => {
     const found = findSubCategory(id);
+    if (
+  found &&
+  (found.main.subCategories || []).some(sub => sub.parent_id === id)
+) {
+  setMessage('❌ Нельзя удалить раздел с дочерними подразделами');
+  return;
+}
+
     if (found && found.sub.items?.length > 0) {
       setMessage('❌ Нельзя удалить непустую подкатегорию');
       return;
@@ -312,15 +377,37 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
   };
 
   // ===== СОХРАНЕНИЕ И ЗАКРЫТИЕ =====
-  const handleClose = () => {
-  if (hasChanges) {
-    // Передаём обновлённые данные в родительский компонент
-    onUpdate(mainCategories);
-  } else {
+  const handleClose = async () => {
+  if (closing || addingSubRef.current) return;
+
+  if (!hasChanges) {
     onUpdate(null);
+    onClose();
+    return;
   }
-  onClose();
+
+  setClosing(true);
+
+  try {
+    const response = await axios.get(`${API_URL}/api/full-hierarchy`);
+
+    if (!Array.isArray(response.data)) {
+      throw new Error('Сервер вернул некорректный каталог');
+    }
+
+    onUpdate(response.data);
+    onClose();
+  } catch (err) {
+    setMessage(
+      '❌ Изменения уже сохранены, но обновить каталог не удалось: ' +
+      (err.response?.data?.error || err.message) +
+      '. Попробуйте закрыть редактор ещё раз.'
+    );
+  } finally {
+    setClosing(false);
+  }
 };
+
 
   const totalItems = mainCategories.reduce((acc, main) => {
     const subs = main.subCategories || [];
@@ -393,6 +480,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
           <div style={{ display: 'flex', gap: '12px' }}>
             <button
               onClick={handleClose}
+              disabled={closing || addingSub}
               style={{
                 padding: '8px 20px',
                 backgroundColor: hasChanges ? '#4caf50' : '#333',
@@ -404,7 +492,12 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                 cursor: 'pointer'
               }}
             >
-              {hasChanges ? '✅ Готово — закрыть' : '✕ Закрыть'}
+              {closing
+  ? 'Обновляем каталог…'
+  : hasChanges
+    ? '✅ Готово — закрыть'
+    : '✕ Закрыть'}
+
             </button>
           </div>
         </div>
@@ -421,6 +514,10 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
             {message}
           </div>
         )}
+<fieldset
+  disabled={closing}
+  style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+>
 
         {/* ===== СПИСОК КАТЕГОРИЙ ===== */}
         {mainCategories.length === 0 ? (
@@ -430,7 +527,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
         ) : (
           mainCategories.map((mainCat) => {
             const isMainOpen = openCategories[mainCat.id] || false;
-            const subs = mainCat.subCategories || [];
+            const subs = getEditorCategoryRows(mainCat);
 
             return (
               <section key={mainCat.id} style={{ marginBottom: '8px' }}>
@@ -477,13 +574,28 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                     marginTop: '4px',
                     borderLeft: '2px solid #2a2a2a'
                   }}>
-                    {subs.map((sub) => {
+                    {subs
+  .filter(sub =>
+    sub.editorAncestors.every(id => openCategories[id])
+  )
+  .map((sub) => {
+
                       const isSubOpen = openCategories[sub.id] || false;
                       const items = sub.items || [];
                       const isEditing = editingSub === sub.id;
+                      const cannotDeleteSub =
+                        items.length > 0 || sub.editorHasChildren;
+
 
                       return (
-                        <div key={sub.id} style={{ marginBottom: '4px' }}>
+                        <div
+  key={sub.id}
+  style={{
+    marginBottom: 4,
+    marginLeft: Math.min(sub.editorDepth, 6) * 16,
+  }}
+>
+
                           {/* ===== ЗАГОЛОВОК ПОДКАТЕГОРИИ ===== */}
                           <div
                             style={{
@@ -589,14 +701,19 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                                       backgroundColor: 'transparent',
                                       border: '1px solid #555',
                                       borderRadius: '4px',
-                                      color: items.length > 0 ? '#444' : '#888',
+                                      color: cannotDeleteSub ? '#444' : '#888',
                                       fontSize: '12px',
-                                      cursor: items.length > 0 ? 'default' : 'pointer',
+                                      cursor: cannotDeleteSub ? 'default' : 'pointer',
                                       transition: 'all 0.2s',
-                                      opacity: items.length > 0 ? 0.3 : 1
+                                      opacity: cannotDeleteSub ? 0.3 : 1
                                     }}
-                                    disabled={items.length > 0}
-                                    title={items.length > 0 ? 'Нельзя удалить непустую подкатегорию' : 'Удалить подкатегорию'}
+                                    disabled={cannotDeleteSub}
+                                    title={
+  cannotDeleteSub
+    ? 'Сначала переместите оборудование и удалите дочерние разделы'
+    : 'Удалить пустой подраздел'
+}
+
                                   >
                                     ✕
                                   </button>
@@ -858,13 +975,19 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                                           >
                                             <option value="">Выберите подкатегорию...</option>
                                             {mainCategories
-                                              .flatMap(main => main.subCategories || [])
-                                              .filter(sub => sub.id !== item.sub_category_id)
-                                              .map(sub => (
-                                                <option key={sub.id} value={sub.id}>
-                                                  {sub.name}
-                                                </option>
-                                              ))}
+  .flatMap(main =>
+    getEditorCategoryRows(main).map(sub => ({
+      ...sub,
+      targetLabel: `${main.name} → ${sub.editorPath}`,
+    }))
+  )
+  .filter(sub => sub.id !== item.sub_category_id)
+  .map(sub => (
+    <option key={sub.id} value={sub.id}>
+      {sub.targetLabel}
+    </option>
+  ))}
+
                                           </select>
                                           <button
                                             onClick={() => handleMoveItem(item.id)}
@@ -1014,6 +1137,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                     {showAddSub === mainCat.id ? (
                       <div style={{
                         display: 'flex',
+                        flexWrap: 'wrap',
                         gap: '8px',
                         padding: '6px 12px',
                         backgroundColor: '#1a1a1a',
@@ -1021,9 +1145,46 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                         alignItems: 'center',
                         border: '1px solid #4caf50'
                       }}>
+                      <label
+  style={{
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    color: '#aaa',
+    fontSize: 12,
+    maxWidth: '100%',
+  }}
+>
+  Где создать
+  <select
+    value={newSubParentId}
+    onChange={event => setNewSubParentId(event.target.value)}
+    disabled={addingSub}
+    style={{
+      padding: '7px 8px',
+      background: '#111',
+      color: '#eee',
+      border: '1px solid #555',
+      borderRadius: 4,
+      maxWidth: '100%',
+    }}
+  >
+    <option value="">
+      Непосредственно в «{mainCat.name}»
+    </option>
+
+    {getEditorCategoryRows(mainCat).map(sub => (
+      <option key={sub.id} value={sub.id}>
+        {sub.editorPath}
+      </option>
+    ))}
+  </select>
+</label>
+
                         <input
                           type="text"
                           placeholder="Название подкатегории..."
+                          disabled={addingSub}
                           value={newSubName}
                           onChange={(e) => setNewSubName(e.target.value)}
                           onKeyDown={(e) => {
@@ -1047,6 +1208,7 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                         />
                         <button
                           onClick={() => handleAddSubCategory(mainCat.id)}
+                          disabled={addingSub}
                           style={{
                             padding: '4px 12px',
                             backgroundColor: '#4caf50',
@@ -1082,6 +1244,8 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                         onClick={() => {
                           setShowAddSub(mainCat.id);
                           setNewSubName('');
+                          setNewSubParentId('');
+
                         }}
                         style={{
                           display: 'flex',
@@ -1114,8 +1278,11 @@ function EditorPanel({ onClose, onUpdate, initialData }) {
                 )}
               </section>
             );
+            
           })
+          
         )}
+         </fieldset>
       </div>
     </div>
   );

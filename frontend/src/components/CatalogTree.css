@@ -1,0 +1,217 @@
+/* Стили ограничены каталогом и не затрагивают другие страницы. */
+.catalog-tree {
+  --tree-accent: #80aaa3;
+  --tree-line: #38413f;
+  --tree-indent: 16px;
+
+  color: #e8eceb;
+  min-width: 0;
+}
+
+.catalog-tree .catalog-tree__section {
+  min-width: 0;
+  margin: 0 0 7px;
+}
+
+/* Общая структура заголовка. */
+.catalog-tree .catalog-tree__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 10px 12px;
+  margin: 0;
+
+  list-style: none;
+  cursor: pointer;
+
+  color: #dce2e0;
+  background: #202523;
+  border: 1px solid #353d39;
+  border-radius: 8px;
+
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.catalog-tree .catalog-tree__heading::-webkit-details-marker {
+  display: none;
+}
+
+.catalog-tree .catalog-tree__heading::marker {
+  content: '';
+}
+
+.catalog-tree .catalog-tree__heading:focus-visible {
+  outline: 2px solid var(--tree-accent);
+  outline-offset: 3px;
+}
+
+/* Стрелка меняется только у собственного раскрытого раздела. */
+.catalog-tree .catalog-tree__arrow {
+  flex: 0 0 16px;
+  color: #9aa9a2;
+  transition: transform 140ms ease;
+}
+
+.catalog-tree
+  .catalog-tree__section[open]
+  > .catalog-tree__heading
+  > .catalog-tree__arrow {
+  transform: rotate(90deg);
+  color: var(--tree-accent);
+}
+
+.catalog-tree .catalog-tree__name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.catalog-tree .catalog-tree__count {
+  flex: 0 0 auto;
+  min-width: 30px;
+  padding: 3px 7px;
+  box-sizing: border-box;
+
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+
+  color: #bac7c1;
+  background: #ffffff08;
+  border: 1px solid #ffffff12;
+  border-radius: 6px;
+}
+
+/* Уровень 1: основные категории — Свет, Камера и т. д. */
+.catalog-tree .catalog-tree__section--main {
+  margin-bottom: 16px;
+}
+
+.catalog-tree
+  .catalog-tree__section--main
+  > .catalog-tree__heading {
+  min-height: 54px;
+  padding: 13px 14px;
+
+  color: #f1f5f3;
+  background: #2b3531;
+  border-color: #45554d;
+  border-left: 4px solid var(--tree-accent);
+  border-radius: 10px;
+
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* Уровень 2: подразделы — Приборы, Оптика и т. д. */
+.catalog-tree
+  .catalog-tree__section--sub
+  > .catalog-tree__heading {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Уровень 3 и глубже: компактные строки, а не тяжёлые плашки. */
+.catalog-tree
+  .catalog-tree__section--nested
+  > .catalog-tree__heading {
+  padding: 8px 10px;
+  color: #cbd5d0;
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: #303733;
+  border-radius: 5px;
+
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Открытое состояние. */
+.catalog-tree
+  .catalog-tree__section[open]
+  > .catalog-tree__heading {
+  border-color: #597369;
+}
+
+.catalog-tree
+  .catalog-tree__section--nested[open]
+  > .catalog-tree__heading {
+  background: #ffffff04;
+  border-color: transparent;
+  border-bottom-color: var(--tree-accent);
+}
+
+/* Линии и отступы показывают принадлежность родителю. */
+.catalog-tree .catalog-tree__content {
+  min-width: 0;
+  margin: 7px 0 10px 8px;
+  padding-left: var(--tree-indent);
+  border-left: 1px solid var(--tree-line);
+}
+
+.catalog-tree
+  .catalog-tree__section--main
+  > .catalog-tree__content {
+  margin-top: 10px;
+}
+
+.catalog-tree .catalog-tree__items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.catalog-tree .catalog-tree__empty {
+  margin: 0;
+  padding: 12px 4px;
+  color: #a2aea8;
+  font-size: 13px;
+}
+
+.catalog-tree .catalog-tree__empty--center {
+  text-align: center;
+}
+
+@media (hover: hover) {
+  .catalog-tree .catalog-tree__heading:hover {
+    background-color: #303b35;
+  }
+}
+
+@media (max-width: 600px) {
+  .catalog-tree {
+    --tree-indent: 10px;
+  }
+
+  .catalog-tree .catalog-tree__content {
+    margin-left: 3px;
+  }
+
+  .catalog-tree .catalog-tree__heading {
+    gap: 7px;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .catalog-tree
+    .catalog-tree__section--main
+    > .catalog-tree__heading {
+    font-size: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-tree .catalog-tree__heading,
+  .catalog-tree .catalog-tree__arrow {
+    transition: none;
+  }
+}

@@ -350,26 +350,112 @@ app.post('/api/equipment', async (req, res) => {
 });
 
 // POST /api/sub-category — добавить подкатегорию
+// POST /api/sub-category — создать подраздел.
+// parent_id = null: непосредственно в основной категории.
+// parent_id = UUID: внутри существующего подраздела.
 app.post('/api/sub-category', async (req, res) => {
-  const { name, main_category_id } = req.body;
+  const {
+    name,
+    main_category_id,
+    parent_id = null,
+  } = req.body || {};
 
-  if (!name?.trim()) {
-    return res.status(400).json({ error: 'Укажите название подкатегории' });
+  const isUuid = value =>
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+  if (typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({
+      error: 'Укажите название подраздела.',
+    });
   }
-  if (!main_category_id) {
-    return res.status(400).json({ error: 'Укажите главную категорию' });
+
+  if (!isUuid(main_category_id)) {
+    return res.status(400).json({
+      error: 'Выберите основную категорию.',
+    });
+  }
+
+  if (parent_id !== null && !isUuid(parent_id)) {
+    return res.status(400).json({
+      error: 'Некорректный родительский раздел.',
+    });
   }
 
   try {
+    const { data: main, error: mainError } = await supabase
+      .from('main_categories')
+      .select('id')
+      .eq('id', main_category_id)
+      .maybeSingle();
+
+    if (mainError) throw mainError;
+
+    if (!main) {
+      return res.status(404).json({
+        error: 'Основная категория не найдена. Обновите каталог.',
+      });
+    }
+
+    if (parent_id !== null) {
+      const { data: parent, error: parentError } = await supabase
+        .from('sub_categories')
+        .select('id, main_category_id')
+        .eq('id', parent_id)
+        .maybeSingle();
+
+      if (parentError) throw parentError;
+
+      if (!parent) {
+        return res.status(404).json({
+          error: 'Родительский раздел не найден. Обновите каталог.',
+        });
+      }
+
+      if (parent.main_category_id !== main_category_id) {
+        return res.status(400).json({
+          error:
+            'Родительский раздел должен находиться в той же основной категории.',
+        });
+      }
+    }
+
     const { data, error } = await supabase
       .from('sub_categories')
-      .insert({ name: name.trim(), main_category_id })
-      .select();
+      .insert({
+        name: name.trim(),
+        main_category_id,
+        parent_id,
+      })
+      .select()
+      .single();
 
     if (error) throw error;
-    res.status(201).json({ success: true, data: data[0] });
+
+    return res.status(201).json({
+      success: true,
+      data,
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (err.code === '23505') {
+      return res.status(409).json({
+        error:
+          'Подраздел с таким названием уже существует в этой основной категории.',
+      });
+    }
+
+    if (err.code === '23503') {
+      return res.status(409).json({
+        error:
+          'Основная категория или родительский раздел изменились. Обновите каталог и повторите действие.',
+      });
+    }
+
+    console.error('Ошибка создания подраздела:', err);
+
+    return res.status(500).json({
+      error: 'Не удалось создать подраздел.',
+    });
   }
 });
 
@@ -396,35 +482,93 @@ app.patch('/api/sub-category/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/sub-category/:id — удалить подкатегорию (только если пустая)
+// DELETE /api/sub-category/:id — удалить пустой подраздел.
 app.delete('/api/sub-category/:id', async (req, res) => {
   const { id } = req.params;
 
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  ) {
+    return res.status(400).json({
+      error: 'Некорректный ID подраздела.',
+    });
+  }
+
   try {
-    const { count, error: countError } = await supabase
-      .from('equipment')
-      .select('*', { count: 'exact', head: true })
-      .eq('sub_category_id', id);
+    const { data: sub, error: findError } = await supabase
+      .from('sub_categories')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
 
-    if (countError) throw countError;
+    if (findError) throw findError;
 
-    if (count > 0) {
-      return res.status(400).json({ 
-        error: 'Нельзя удалить непустую подкатегорию. Сначала переместите или удалите предметы.' 
+    if (!sub) {
+      return res.status(404).json({
+        error: 'Подраздел уже удалён или не существует.',
       });
     }
 
-    const { error } = await supabase
+    const { count: childCount, error: childError } = await supabase
+      .from('sub_categories')
+      .select('id', { count: 'exact', head: true })
+      .eq('parent_id', id);
+
+    if (childError) throw childError;
+
+    if (childCount > 0) {
+      return res.status(409).json({
+        error:
+          'Внутри есть дочерние разделы. Сначала удалите их, если они больше не нужны.',
+      });
+    }
+
+    const { count: itemCount, error: itemError } = await supabase
+      .from('equipment')
+      .select('id', { count: 'exact', head: true })
+      .eq('sub_category_id', id);
+
+    if (itemError) throw itemError;
+
+    if (itemCount > 0) {
+      return res.status(409).json({
+        error:
+          'В разделе есть оборудование. Сначала переместите его в другой раздел.',
+      });
+    }
+
+    const { data: deleted, error: deleteError } = await supabase
       .from('sub_categories')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
 
-    if (error) throw error;
-    res.json({ success: true });
+    if (deleteError) throw deleteError;
+
+    if (!deleted) {
+      return res.status(404).json({
+        error: 'Подраздел уже удалён. Обновите каталог.',
+      });
+    }
+
+    return res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (err.code === '23503') {
+      return res.status(409).json({
+        error:
+          'Раздел используется другими записями. Обновите каталог и проверьте его содержимое.',
+      });
+    }
+
+    console.error('Ошибка удаления подраздела:', err);
+
+    return res.status(500).json({
+      error: 'Не удалось удалить подраздел.',
+    });
   }
 });
+
 
 // PATCH /api/equipment/:id/move-sub — переместить предмет в другую подкатегорию
 app.patch('/api/equipment/:id/move-sub', async (req, res) => {

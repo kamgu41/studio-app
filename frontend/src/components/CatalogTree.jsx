@@ -1,28 +1,6 @@
-const headingStyle = {
-  cursor: 'pointer',
-  padding: '12px',
-  background: '#181818',
-  border: '1px solid #333',
-  borderRadius: 6,
-  color: '#e0e0e0',
-  overflowWrap: 'anywhere',
-};
+import './CatalogTree.css';
 
-const contentStyle = {
-  marginTop: 6,
-  marginLeft: 8,
-  paddingLeft: 8,
-  borderLeft: '2px solid #333',
-};
-
-const emptyStyle = {
-  color: '#888',
-  padding: '10px 4px',
-  fontSize: 13,
-};
-
-// Отбираем предметы и дочерние разделы.
-// Во вкладке «Всё» сохраняем даже пустые разделы.
+// Сохраняем прежнюю фильтрацию и подсчёт оборудования.
 function prepareNode(node, activeTab) {
   const items = (node.items || []).filter(
     item => activeTab === 'all' || item.status === activeTab
@@ -49,26 +27,52 @@ function prepareNode(node, activeTab) {
   };
 }
 
-function CategoryNode({ node, renderItems }) {
+function SectionHeading({ name, count }) {
   return (
-    <details style={{ marginBottom: 6 }}>
-      <summary style={headingStyle}>
-        {node.name}
-        <span style={{ color: '#999', marginLeft: 8 }}>
-          {node.itemCount}
-        </span>
-      </summary>
+    <summary className="catalog-tree__heading">
+      <svg
+        className="catalog-tree__arrow"
+        viewBox="0 0 16 16"
+        width="16"
+        height="16"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          d="M6 3.5 10.5 8 6 12.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
 
-      <div style={contentStyle}>
+      <span className="catalog-tree__name">{name}</span>
+
+      <span
+        className="catalog-tree__count"
+        aria-label={`Предметов: ${count}`}
+        title="Количество предметов, включая вложенные разделы"
+      >
+        {count}
+      </span>
+    </summary>
+  );
+}
+
+function CategoryNode({ node, renderItems, depth = 1 }) {
+  const levelClass = depth === 1
+    ? 'catalog-tree__section--sub'
+    : 'catalog-tree__section--nested';
+
+  return (
+    <details className={`catalog-tree__section ${levelClass}`}>
+      <SectionHeading name={node.name} count={node.itemCount} />
+
+      <div className="catalog-tree__content">
         {node.items.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-              marginBottom: 6,
-            }}
-          >
+          <div className="catalog-tree__items">
             {renderItems(node.items)}
           </div>
         )}
@@ -78,11 +82,14 @@ function CategoryNode({ node, renderItems }) {
             key={child.id}
             node={child}
             renderItems={renderItems}
+            depth={depth + 1}
           />
         ))}
 
         {node.items.length === 0 && node.children.length === 0 && (
-          <p style={emptyStyle}>Пока нет оборудования.</p>
+          <p className="catalog-tree__empty">
+            Пока нет оборудования.
+          </p>
         )}
       </div>
     </details>
@@ -96,8 +103,6 @@ export default function CatalogTree({
 }) {
   const categories = mainCategories
     .map(main => {
-      // Новый сервер возвращает дерево.
-      // Для старого API оставляем временную совместимость.
       const source = Array.isArray(main.subCategoryTree)
         ? main.subCategoryTree
         : (main.subCategories || []).map(sub => ({
@@ -120,48 +125,43 @@ export default function CatalogTree({
     })
     .filter(main => activeTab === 'all' || main.itemCount > 0);
 
-  if (categories.length === 0) {
-    return (
-      <p style={{ ...emptyStyle, textAlign: 'center' }}>
-        {activeTab === 'repair'
-          ? 'Нет оборудования в ремонте.'
-          : 'Нет разделов для отображения.'}
-      </p>
-    );
-  }
-
   return (
-    <div>
-      {categories.map(main => (
-        <details key={main.id} style={{ marginBottom: 10 }}>
-          <summary
-            style={{
-              ...headingStyle,
-              background: '#222',
-              fontWeight: 600,
-            }}
+    <div className="catalog-tree">
+      {categories.length === 0 ? (
+        <p className="catalog-tree__empty catalog-tree__empty--center">
+          {activeTab === 'repair'
+            ? 'Нет оборудования в ремонте.'
+            : 'Нет разделов для отображения.'}
+        </p>
+      ) : (
+        categories.map(main => (
+          <details
+            key={main.id}
+            className="catalog-tree__section catalog-tree__section--main"
           >
-            {main.name}
-            <span style={{ color: '#aaa', marginLeft: 8 }}>
-              {main.itemCount}
-            </span>
-          </summary>
+            <SectionHeading
+              name={main.name}
+              count={main.itemCount}
+            />
 
-          <div style={contentStyle}>
-            {main.children.map(node => (
-              <CategoryNode
-                key={node.id}
-                node={node}
-                renderItems={renderItems}
-              />
-            ))}
+            <div className="catalog-tree__content">
+              {main.children.map(node => (
+                <CategoryNode
+                  key={node.id}
+                  node={node}
+                  renderItems={renderItems}
+                />
+              ))}
 
-            {main.children.length === 0 && (
-              <p style={emptyStyle}>Пока нет подразделов.</p>
-            )}
-          </div>
-        </details>
-      ))}
+              {main.children.length === 0 && (
+                <p className="catalog-tree__empty">
+                  Пока нет подразделов.
+                </p>
+              )}
+            </div>
+          </details>
+        ))
+      )}
     </div>
   );
 }
